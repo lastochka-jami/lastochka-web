@@ -20,7 +20,8 @@ import {
   Trash2,
   ScanLine,
 } from 'lucide-react';
-import { BarcodeScannerModal } from './barcode-scanner-modal';
+import dynamic from 'next/dynamic';
+const BarcodeScannerModal = dynamic(() => import('./barcode-scanner-modal').then(m => m.BarcodeScannerModal), { ssr: false });
 import {
   LOCATION_CHANGED_EVENT,
   LOCATION_MODE_STORAGE_KEY,
@@ -31,7 +32,7 @@ import {
 } from './location-sheet';
 import { useShop } from './shop-context';
 import { request } from '@/lib/client';
-import { list, money, Store, CartItem, product, type Address } from '@/lib/types';
+import { list, money, Store, CartItem, product, type Address, itemAmount, quantityLabel } from '@/lib/types';
 import { Modal, Photo } from './ui';
 import { HomeBrandLink } from './home-brand-link';
 
@@ -71,15 +72,10 @@ export function Header({ store }: { store: Store | null }) {
     [];
   const firstGroup = s.cart?.storeGroups?.[0];
   const calculatedItemsTotal = items.reduce(
-    (acc, it) => acc + (it.price || it.product?.price || 0) * it.quantity,
+    (acc, it) => acc + itemAmount(it),
     0,
   );
-  const total =
-    firstGroup?.totalToPay ??
-    firstGroup?.total ??
-    s.cart?.totalToPay ??
-    s.cart?.total ??
-    (calculatedItemsTotal > 0 ? calculatedItemsTotal : undefined);
+  const total = calculatedItemsTotal > 0 ? calculatedItemsTotal : undefined;
 
   const innerTitle = getInnerScreenTitle(path);
 
@@ -246,7 +242,7 @@ export function Header({ store }: { store: Store | null }) {
             <Link className="cart-button" href="/cart">
               <ShoppingBasket />
               <span>
-                {typeof total === 'number' && total > 0 ? money(total) : 'Корзина'}
+                {typeof total === 'number' && total > 0 ? `≈ ${money(total)}` : 'Корзина'}
                 {items.length > 0 && <small>{items.length}</small>}
               </span>
             </Link>
@@ -276,7 +272,7 @@ export function Header({ store }: { store: Store | null }) {
                             <div className="cart-preview-info">
                               <span className="cart-preview-title">{normalized.title}</span>
                               <small className="muted">
-                                {it.quantity} шт · {money(it.price || normalized.price)}
+                                {quantityLabel(normalized, it.quantity)} · {money(it.price || normalized.price)}
                               </small>
                             </div>
                           </div>
@@ -290,7 +286,7 @@ export function Header({ store }: { store: Store | null }) {
                     <div className="cart-preview-footer">
                       <div className="cart-preview-total">
                         <span>Итого:</span>
-                        <strong>{typeof total === 'number' ? money(total) : '—'}</strong>
+                        <strong>{typeof total === 'number' ? `≈ ${money(total)}` : '—'}</strong>
                       </div>
                       <Link
                         href="/cart"
@@ -354,11 +350,11 @@ export function Header({ store }: { store: Store | null }) {
       </nav>
 
       {/* Floating Cart Pill on Mobile (only if cart has items and not on /cart page) */}
-      {items.length > 0 && path !== '/cart' && (
-        <div className="float-actions" aria-label="Быстрые действия">
+      {items.length > 0 && path !== '/cart' && !path.startsWith('/product/') && (
+        <div className={`float-actions ${path.startsWith("/product/") || path === "/cart" ? "hidden-on-product" : ""}`} aria-label="Быстрые действия">
           <Link className="float-cart-btn" href="/cart" aria-label="Открыть корзину">
             <ShoppingBasket size={19} />
-            <span>{typeof total === 'number' && total > 0 ? money(total) : 'Корзина'}</span>
+            <span>{typeof total === 'number' && total > 0 ? `≈ ${money(total)}` : 'Корзина'}</span>
           </Link>
         </div>
       )}
@@ -370,10 +366,10 @@ export function Header({ store }: { store: Store | null }) {
         initialTab={locationTab}
       />
 
-      <BarcodeScannerModal
+      {scannerOpen && <BarcodeScannerModal
         isOpen={scannerOpen}
         onClose={() => setScannerOpen(false)}
-      />
+      />}
     </>
   );
 }

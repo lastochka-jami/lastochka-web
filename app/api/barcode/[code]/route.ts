@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { upstream, ApiError } from '@/lib/upstream';
+import { upstream, ApiError, selectedStore } from '@/lib/upstream';
 
 export async function GET(
   _req: Request,
@@ -13,7 +13,7 @@ export async function GET(
   }
 
   try {
-    const data = await upstream(`products/search/barcode/${encodeURIComponent(barcode)}`, {
+    const data = await upstream(`products/search/barcode/${encodeURIComponent(barcode)}?storeId=${await selectedStore()}`, {
       cache: 'no-store',
     });
     return NextResponse.json(data);

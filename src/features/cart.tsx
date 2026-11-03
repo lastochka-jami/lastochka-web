@@ -35,17 +35,15 @@ import {
   product,
   truth,
   Product,
+  itemAmount,
 } from '@/lib/types';
 import { useRemote } from './account/hooks/use-remote';
 import { goPayment } from './account/orders/orders-view';
-import { clearGuestCart } from '@/lib/guest-cart';
+import { LOCATION_MODE_STORAGE_KEY, LOCATION_CHANGED_EVENT, LocationSelection, activateDeliveryAddressForStore } from '@/components/location-sheet';
+import { clearGuestCart, getGuestCart, mergeGuestCartToServer } from '@/lib/guest-cart';
 
 export function CartPage() {
-  return (
-    <AuthGate title="Войдите, чтобы открыть корзину">
-      <CartContent />
-    </AuthGate>
-  );
+  return <CartContent />;
 }
 
 function CartContent() {
@@ -76,14 +74,15 @@ function CartContent() {
   const [reviewModal, setReviewModal] = useState<any>();
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
   const [localCart, setLocalCart] = useState<Cart | null>(null);
-  const [termsAgreed, setTermsAgreed] = useState(true);
+  const [termsAgreed, setTermsAgreed] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
 
   const lock = useRef(false);
 
   const cart = localCart || s.cart;
   const groups: CartStoreGroup[] = cart?.storeGroups || [];
-  const group = groups[0];
+  const [selectedStore, setSelectedStore] = useState<number>();
+  const group = groups.find(g => g.store.id === selectedStore) || groups[0];
   const storeId = group?.store?.id || 2;
 
   const appSettings = unwrap<any>(settingsRemote.data);
@@ -96,7 +95,7 @@ function CartContent() {
         }`
       : null;
 
-  const slotsRemote = useRemote<any>(s.authenticated ? slotPath : null);
+  const slotsRemote = useRemote<any>(s.authenticated && slotPath ? slotPath + "&cartVersion=" + encodeURIComponent(JSON.stringify(cart?.storeGroups?.map(g => g.items.map(i => [i.id, i.quantity, i.supplements])))) : null);
   const slotData = unwrap<any>(slotsRemote.data);
 
   // Featured upsell dishes ("Фирменные блюда")
@@ -108,22 +107,29 @@ function CartContent() {
       ? group?.store?.pickupPaymentMethods
       : slotData?.availablePaymentMethods;
 
-  const items: CartItem[] = groups.flatMap((g) => g.items || []) || [];
+  const items: CartItem[] = group?.items || [];
+  const cartVersion = JSON.stringify(items.map(i => [i.id, i.quantity, i.supplements]));
 
   // Базовая стоимость товаров: сумма цен позиций в корзине
   const calculatedItemsTotal = items.reduce(
-    (acc, it) => acc + (it.price || it.product?.price || 0) * it.quantity,
+    (acc, it) => acc + itemAmount(it),
     0,
   );
 
-  // Итоговая сумма к оплате:
-  // Если бэкенд возвращает 0 (например, пока адрес доставки не выбран пользователем),
-  // используем расчётную стоимость товаров, чтобы на странице не отображалось 0,00 ₽
-  const serverTotal = group?.totalToPay ?? group?.total ?? cart?.totalToPay;
-  const total =
-    typeof serverTotal === 'number' && serverTotal > 0
-      ? serverTotal
-      : calculatedItemsTotal;
+  // The API exposes components, but no confirmed order preview. This stays an estimate.
+  const total = Math.max(0, calculatedItemsTotal + (group?.assemblyCost ?? 0) + (mode === 'courier' ? group?.deliveryCost ?? 0 : 0) - (group?.discount ?? 0) - (bonus === 'spend' ? Math.min(group?.bonus?.maxSpend || 0, group?.bonus?.userBalance || 0, Math.max(0, Math.floor(Number(spend) || 0))) : 0));
+
+  useEffect(() => {
+    const saved = localStorage.getItem(LOCATION_MODE_STORAGE_KEY);
+    if (saved) setMode(saved === 'pickup' ? 'pickup' : 'courier');
+    const update = (e: Event) => setMode((e as CustomEvent<LocationSelection>).detail.mode === 'pickup' ? 'pickup' : 'courier');
+    window.addEventListener(LOCATION_CHANGED_EVENT, update);
+    return () => window.removeEventListener(LOCATION_CHANGED_EVENT, update);
+  }, []);
+  useEffect(() => { setSlot(''); setReviewModal(undefined); }, [date, cartVersion]);
+  useEffect(() => {
+    if (!paymentMethods?.includes(payment)) setPayment(paymentMethods?.[0] || '');
+  }, [JSON.stringify(paymentMethods), payment]);
 
   useEffect(() => {
     setLocalCart(null);
@@ -139,6 +145,7 @@ function CartContent() {
   }, [addressesRemote.data, addressId, s.authenticated]);
 
   useEffect(() => {
+    let alive = true;
     setSlot('');
     setReviewModal(undefined);
     if (storeId && s.authenticated) {
@@ -146,12 +153,14 @@ function CartContent() {
         const latest = unwrap<Cart>(
           await request(`cart?shippingMethod=${mode}${addressId ? '&addressId=' + addressId : ''}`),
         );
-        setLocalCart(latest);
+        if (alive) setLocalCart(latest);
       });
     }
+    return () => { alive = false; };
   }, [mode, addressId, storeId, s.authenticated]);
 
   async function handleClearCart() {
+    if (items.some(i => i.transferKey)) { s.notice('Сначала повторите перенос: ответ по некоторым позициям не получен.'); return; }
     if (!confirm('Удалить все товары из корзины?')) return;
     if (s.authenticated) {
       await s.run(async () => {
@@ -175,56 +184,11 @@ function CartContent() {
 
   async function prepareOrder(e?: React.FormEvent) {
     if (e) e.preventDefault();
-    if (lock.current) return;
-
-    if (!termsAgreed) {
-      s.notice('Пожалуйста, подтвердите согласие с условиями использования и офертой');
-      return;
-    }
-
-    if (!s.authenticated) {
-      // Prompt user to log in via SMS right at the checkout confirmation step
-      s.notice('Для оформления заказа подтвердите номер телефона');
-      s.login();
-      return;
-    }
-
-    lock.current = true;
-    setBusy(true);
-
-    await s.run(async () => {
-      const latest = unwrap<Cart>(
-        await request(`cart?shippingMethod=${mode}${addressId ? '&addressId=' + addressId : ''}`),
-      );
-      setLocalCart(latest);
-
-      const targetGroup = latest.storeGroups?.find((x) => x.store.id === storeId);
-      if (!targetGroup?.items?.length) {
-        throw new Error('В корзине не осталось доступных товаров');
-      }
-
-      const latestTotal = targetGroup.totalToPay ?? targetGroup.total ?? latest.totalToPay;
-      const latestItemsTotal = (targetGroup.items || []).reduce(
-        (acc: number, it: any) => acc + (it.price || it.product?.price || 0) * it.quantity,
-        0,
-      );
-      const confirmedTotal =
-        typeof latestTotal === 'number' && latestTotal > 0 ? latestTotal : latestItemsTotal;
-      if (typeof confirmedTotal !== 'number' || confirmedTotal <= 0) {
-        throw new Error(
-          'Магазин пока не передаёт подтверждённый итог корзины. Товары в корзине сохранены.',
-        );
-      }
-
-      setReviewModal({ cart: latest, total: confirmedTotal, storeId });
-    });
-
-    lock.current = false;
-    setBusy(false);
+    s.notice('Магазин пока не передаёт подтверждённый итог. Оформление недоступно; корзина сохранена.');
   }
 
   async function submitFinalOrder() {
-    if (lock.current || !reviewModal) return;
+    if (!s.checkoutEnabled || lock.current || !reviewModal) return;
     lock.current = true;
     setBusy(true);
 
@@ -248,7 +212,7 @@ function CartContent() {
           comment,
           paymentType: payment,
           bonusAction: bonus,
-          ...(bonus === 'spend' ? { bonusSpendAmount: Math.round(Number(spend) * 100) } : {}),
+          ...(bonus === 'spend' ? { bonusSpendAmount: Math.round(Number(spend)) } : {}),
           checkoutOptions: selectedOptions,
           returnUrl: paymentReturnUrl('/payment', s.publicOrigin),
         };
@@ -287,12 +251,24 @@ function CartContent() {
   }
 
   if (!cart) {
-    return <p className="muted">Загружаем корзину…</p>;
+    return s.cartError ? <ErrorMessage message={s.cartError} retry={s.refresh} /> : <p className="muted">Загружаем корзину…</p>;
   }
+
+  const retainedItems = s.authenticated ? (getGuestCart().storeGroups || []).flatMap(g => g.items) : [];
+  const transferPanel = retainedItems.length > 0 ? <div className="panel stack">
+    <p>На устройстве сохранены неперенесённые товары:</p>
+    <ul>{retainedItems.map(i => <li key={i.id}>{i.product.title}: {i.quantity} {i.product.measurementUnitLabel}</li>)}</ul>
+    <button className="secondary" type="button" onClick={() => s.run(async () => {
+      const result = await mergeGuestCartToServer();
+      s.notice(`Перенесено: ${result.accepted}, осталось на устройстве: ${result.remaining}. Если безопасный срок повтора истёк, требуется сверка с магазином.`);
+      await s.refresh();
+    })}>Повторить перенос сохранённых товаров</button>
+  </div> : null;
 
   if (!items.length) {
     return (
-      <Empty title="В корзине пока пусто">
+      <Empty title={retainedItems.length ? "Не все товары перенесены" : "В корзине пока пусто"}>
+        {transferPanel}
         <p>Добавьте любимые продукты, свежую выпечку или готовые блюда.</p>
         <Link className="primary" href="/catalog">
           Перейти в каталог
@@ -324,7 +300,7 @@ function formatRub(v: unknown): string {
     <div className="cart-payment-section">
       <h3>Способ оплаты</h3>
       <div className="cart-payment-list">
-        {(paymentMethods || ['card', 'cash']).map((pMethod: string) => {
+        {(paymentMethods || []).map((pMethod: string) => {
           const isSelected = payment === pMethod;
           return (
             <button
@@ -357,7 +333,7 @@ function formatRub(v: unknown): string {
       </div>
       <div className="cart-summary-line">
         <span>Сборка</span>
-        <span className="cart-summary-free-label">бесплатно</span>
+        <span>{typeof group?.assemblyCost === "number" ? formatRub(group.assemblyCost) : "Уточняется"}</span>
       </div>
       {typeof group?.deliveryCost === 'number' && group.deliveryCost > 0 && (
         <div className="cart-summary-line">
@@ -371,13 +347,14 @@ function formatRub(v: unknown): string {
           <span className="cart-summary-discount-val">−{formatRub(group.discount)}</span>
         </div>
       )}
+      {group?.store?.minOrderAmount && calculatedItemsTotal < group.store.minOrderAmount ? <p className="muted">Минимальная сумма товаров: {money(group.store.minOrderAmount)}</p> : null}
       <div className="cart-summary-line-divider" />
       <div className="cart-summary-total-line">
-        <strong>Общая сумма заказа</strong>
+        <strong>Предварительная оценка</strong>
         <strong className="cart-summary-total-amount">{formatRub(total)}</strong>
       </div>
       <div className="cart-summary-points-hint">
-        Получите +{Math.max(1, Math.floor(total * 0.01))} баллов
+        {group?.bonus?.maxEarn !== undefined ? `Можно получить до ${group.bonus.maxEarn} бонусов` : "Точный итог, доставка и скидки уточняются магазином"}
       </div>
     </div>
   );
@@ -386,16 +363,12 @@ function formatRub(v: unknown): string {
     <div className="cart-cta-section">
       <button
         className="primary cart-main-cta-btn"
-        disabled={busy || (s.authenticated && !s.checkoutEnabled)}
+        disabled={true}
         type="submit"
       >
-        {busy
-          ? 'Проверяем заказ…'
-          : !s.authenticated
-            ? 'Войти и заказать'
-            : 'Заказать'}
+        Оформление недоступно
       </button>
-      <button
+      {s.checkoutEnabled && <button
         type="button"
         className="cart-terms-agreement-row"
         onClick={() => setTermsAgreed(!termsAgreed)}
@@ -413,7 +386,8 @@ function formatRub(v: unknown): string {
             публичной офертой
           </Link>
         </span>
-      </button>
+      </button>}
+      {!s.authenticated && <button type="button" className="text-button" onClick={s.login}>Войти, чтобы перенести корзину</button>}
     </div>
   );
 
@@ -452,6 +426,10 @@ function formatRub(v: unknown): string {
         </div>
       </div>
 
+      {groups.length > 1 && <label>Магазин корзины<select value={storeId} onChange={e => setSelectedStore(Number(e.target.value))}>{groups.map(g => <option key={g.store.id} value={g.store.id}>{g.store.name}</option>)}</select></label>}
+      {transferPanel}
+      {s.cartError && <ErrorMessage message={s.cartError} retry={s.refresh} />}
+      <p className="notice-banner">Предварительная оценка. Онлайн-оформление временно недоступно.</p>
       <form onSubmit={prepareOrder} className="cart-form-root">
         <div className="cart-layout-two-column">
           {/* Left / Main Column */}
@@ -461,7 +439,7 @@ function formatRub(v: unknown): string {
               <button
                 type="button"
                 className={`cart-mode-pill ${mode === 'courier' ? 'active' : ''}`}
-                onClick={() => setMode('courier')}
+                onClick={() => { setMode('courier'); localStorage.setItem(LOCATION_MODE_STORAGE_KEY, 'delivery'); window.dispatchEvent(new CustomEvent(LOCATION_CHANGED_EVENT, { detail: { mode: 'delivery' } })); }}
               >
                 Доставка
               </button>
@@ -469,7 +447,7 @@ function formatRub(v: unknown): string {
                 <button
                   type="button"
                   className={`cart-mode-pill ${mode === 'pickup' ? 'active' : ''}`}
-                  onClick={() => setMode('pickup')}
+                  onClick={() => { setMode('pickup'); localStorage.setItem(LOCATION_MODE_STORAGE_KEY, 'pickup'); window.dispatchEvent(new CustomEvent(LOCATION_CHANGED_EVENT, { detail: { mode: 'pickup' } })); }}
                 >
                   Самовывоз
                 </button>
@@ -493,6 +471,8 @@ function formatRub(v: unknown): string {
                 />
               </button>
 
+              {slotsRemote.error && <ErrorMessage message={slotsRemote.error} retry={slotsRemote.reload} />}
+              {addressesRemote.error && <ErrorMessage message={addressesRemote.error} retry={addressesRemote.reload} />}
               {showTimePicker && (
                 <div className="cart-time-dropdown panel stack">
                   <div className="two-fields date-time-grid">
@@ -513,7 +493,7 @@ function formatRub(v: unknown): string {
                           setSlot(e.target.value);
                           if (e.target.value) setShowTimePicker(false);
                         }}
-                        required
+                        required={!appSettings?.checkoutWithoutSlots}
                         disabled={!s.authenticated}
                       >
                         <option value="">
@@ -543,7 +523,7 @@ function formatRub(v: unknown): string {
                     <MapPin size={18} className="cart-address-icon" />
                     <select
                       value={addressId}
-                      onChange={(e) => setAddressId(e.target.value)}
+                      onChange={e => { const next = e.target.value; if (!next) { setAddressId(''); return; } void s.run(async () => { const result = await activateDeliveryAddressForStore(Number(next), storeId, list<Address>(addressesRemote.data).filter(a => a.id === Number(next)).map(a => [a.city, a.street, a.houseNumber].filter(Boolean).join(', '))[0]); setAddressId(next); setSelectedStore(result.store.id); await s.refresh(); }); }}
                       className="cart-address-select"
                       required
                     >
@@ -561,36 +541,7 @@ function formatRub(v: unknown): string {
                     </Link>
                   </div>
                 ) : (
-                  <div className="guest-address-form stack">
-                    <p className="muted">Адрес доставки:</p>
-                    <div className="two-fields">
-                      <input
-                        required
-                        placeholder="Город"
-                        value={guestAddress.city}
-                        onChange={(e) => setGuestAddress({ ...guestAddress, city: e.target.value })}
-                      />
-                      <input
-                        required
-                        placeholder="Улица"
-                        value={guestAddress.street}
-                        onChange={(e) => setGuestAddress({ ...guestAddress, street: e.target.value })}
-                      />
-                    </div>
-                    <div className="two-fields">
-                      <input
-                        required
-                        placeholder="Дом"
-                        value={guestAddress.house}
-                        onChange={(e) => setGuestAddress({ ...guestAddress, house: e.target.value })}
-                      />
-                      <input
-                        placeholder="Квартира"
-                        value={guestAddress.apartment}
-                        onChange={(e) => setGuestAddress({ ...guestAddress, apartment: e.target.value })}
-                      />
-                    </div>
-                  </div>
+                  <p className="muted">Войдите, чтобы выбрать сохранённый адрес доставки. Гостевая корзина хранится на этом устройстве.</p>
                 )}
               </div>
             ) : (
@@ -605,13 +556,13 @@ function formatRub(v: unknown): string {
 
             {/* Cart Items List */}
             <div className="cart-items-wrapper">
-              {groups.map((g) => (
+              {[group].filter(Boolean).map((g) => (
                 <section className="cart-items-group" key={g.store.id}>
                   <div className="cart-items-list">
                     {g.items.map((i) => {
                       const normalized = product(i.product);
-                      const unitPrice = i.price || normalized.price;
-                      const itemTotal = unitPrice * i.quantity;
+                      const unitPrice = i.price ?? normalized.price;
+                      const itemTotal = itemAmount(i);
                       const stepVal = Number(normalized.quantityStep) || 1;
                       const unitName = (normalized.measurementUnitLabel || 'шт').replace(/^[0-9.]+\s*/, '') || 'шт';
 
@@ -626,8 +577,12 @@ function formatRub(v: unknown): string {
                               {normalized.title}
                             </Link>
                             <div className="cart-item-unit-badge">
-                              {formatRub(unitPrice)} / {normalized.measurementUnitLabel}
+                              {formatRub(unitPrice)} / {stepVal > 1 ? `${stepVal} ` : ''}{normalized.measurementUnitLabel}
                             </div>
+                            {i.supplements?.length ? <p className="muted">{i.supplements.map((raw: any) => {
+                              const definition = normalized.supplements.find(v => v.id === raw.supplementId);
+                              return (raw.values || definition?.values.filter(v => raw.valueIds?.includes(v.id)) || []).map((v: any) => v.title || v.name).join(', ');
+                            }).filter(Boolean).join('; ')}</p> : null}
                             {i.stockWarning && <p className="error">{i.stockWarning}</p>}
                           </div>
 
@@ -685,7 +640,7 @@ function formatRub(v: unknown): string {
             <div className="cart-packaging-banner">
               <div className="cart-packaging-content">
                 <strong>Мы всё аккуратно упакуем в пакеты</strong>
-                <p>Все пакеты бесплатно!</p>
+                <p>Стоимость упаковки уточняется магазином.</p>
               </div>
               <div className="cart-packaging-image">
                 <img src="/images/swallow.webp" alt="Ласточка" width={68} height={54} />
@@ -806,19 +761,6 @@ function formatRub(v: unknown): string {
               </section>
             )}
 
-            {/* On mobile: Payment, Summary and CTA follow right in column */}
-            <div className="cart-mobile-bottom-flow">
-              {paymentSection}
-              {summarySection}
-              {ctaSection}
-            </div>
-          </div>
-
-          {/* Right Column (Sticky on Desktop) */}
-          <div className="cart-right-column">
-            <div className="sticky-order-summary panel">
-              {paymentSection}
-
               {/* Bonus Earn / Spend */}
               {s.authenticated && group?.bonus?.isEnabled && (
                 <div className="bonus-checkout-block">
@@ -841,12 +783,12 @@ function formatRub(v: unknown): string {
 
                   {bonus === 'spend' && (
                     <label className="spend-bonuses-input">
-                      Списать бонусов (доступно: {money((group.bonus?.balance || 0) / 100)})
+                      Списать бонусов (доступно: {Math.min(group.bonus?.userBalance || 0, group.bonus?.maxSpend || 0)})
                       <input
                         type="number"
-                        min="0.01"
-                        step="0.01"
-                        max={(group.bonus?.balance || 0) / 100}
+                        min="1"
+                        step="1"
+                        max={Math.min(group.bonus?.userBalance || 0, group.bonus?.maxSpend || 0)}
                         value={spend}
                         onChange={(e) => setSpend(e.target.value)}
                         required
@@ -855,6 +797,20 @@ function formatRub(v: unknown): string {
                   )}
                 </div>
               )}
+
+            {/* On mobile: Payment, Summary and CTA follow right in column */}
+            <div className="cart-mobile-bottom-flow">
+              {paymentSection}
+              {summarySection}
+              {ctaSection}
+            </div>
+          </div>
+
+          {/* Right Column (Sticky on Desktop) */}
+          <div className="cart-right-column">
+            <div className="sticky-order-summary panel">
+              {paymentSection}
+
 
               {summarySection}
               {ctaSection}
@@ -894,7 +850,7 @@ function formatRub(v: unknown): string {
       <ShareCartModal
         isOpen={shareModalOpen}
         onClose={() => setShareModalOpen(false)}
-        items={items}
+        items={items.map(i => ({ ...i, product: { ...i.product, storeId } }))}
       />
     </div>
   );
