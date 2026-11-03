@@ -96,7 +96,7 @@ async function handle(req: Request, ctx: { params: Promise<{ path: string[] }> }
     }
 
     const query = new URL(req.url).search;
-    const data = await upstream(path + query, { method, body, token: currentSession?.token });
+    const data = await upstream(path + query, { method, body, token: currentSession?.token, idempotencyKey: req.headers.get("Idempotency-Key") || undefined });
 
     if (path === 'auth/phone-confirm' && data?.token) {
       const fresh = await createSession(data.token, currentSession?.store);
@@ -122,6 +122,12 @@ async function handle(req: Request, ctx: { params: Promise<{ path: string[] }> }
 
     return NextResponse.json(data ?? { ok: true }, { headers: responseHeaders });
   } catch (err) {
+    if (err instanceof ApiError && err.status === 401 && currentSession) {
+      await removeSession(currentSession);
+      const response = NextResponse.json(err.payload, { status: 401, headers: responseHeaders });
+      response.cookies.set(cookieName, '', { ...cookieOptions, maxAge: 0 });
+      return response;
+    }
     if (path === 'auth/logout' && currentSession) {
       await removeSession(currentSession);
       const response = NextResponse.json(

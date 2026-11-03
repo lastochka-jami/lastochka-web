@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import QRCode from 'qrcode';
+
 import { QrCode, Gift, Smartphone, ArrowRight } from 'lucide-react';
 import { useShop } from '@/components/shop-context';
 import { unwrap, LoyaltyCardDto } from '@/lib/types';
@@ -19,20 +19,26 @@ export function LoyaltyCard({ compact = false }: { compact?: boolean }) {
   const cardData = unwrap<LoyaltyCardDto>(remote.data);
 
   useEffect(() => {
-    const payload =
-      cardData?.status === 'active' && cardData.qrPayload
-        ? cardData.qrPayload
-        : cardData?.cardNumber
-          ? `lastochka:${cardData.cardNumber}`
-          : 'https://lastochki.store/loyalty';
-    QRCode.toDataURL(payload, {
+    setQrCodeDataUrl('');
+    if (cardData?.status !== 'active' || !cardData.qrPayload?.trim()) return;
+
+    let cancelled = false;
+    const payload = cardData.qrPayload.trim();
+    import('qrcode').then(({ default: QRCode }) => QRCode.toDataURL(payload, {
       width: 480,
       margin: 1,
       errorCorrectionLevel: 'M',
-    })
-      .then(setQrCodeDataUrl)
-      .catch(() => setQrCodeDataUrl(''));
-  }, [cardData?.status, cardData?.qrPayload, cardData?.cardNumber]);
+    }))
+      .then((dataUrl) => {
+        if (!cancelled) setQrCodeDataUrl(dataUrl);
+      })
+      .catch(() => {
+        if (!cancelled) setQrCodeDataUrl('');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [cardData?.status, cardData?.qrPayload]);
 
   const handleCardClick = () => {
     if (!s.authenticated) {
@@ -44,7 +50,7 @@ export function LoyaltyCard({ compact = false }: { compact?: boolean }) {
 
   const balanceNumber =
     s.authenticated && typeof cardData?.balance === 'number'
-      ? cardData.balance / 100
+      ? Math.trunc(cardData.balance)
       : 0;
   const formattedBalance = `${balanceNumber.toLocaleString('ru-RU')} бонусов`;
 

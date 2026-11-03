@@ -44,7 +44,7 @@ export function ProductCard({ p }: { p: Product }) {
   const weightOrUnit =
     p.weight && p.weight > 0
       ? `${p.weight} гр`
-      : p.measurementUnitLabel || '1 шт';
+      : quantityLabel(p, step(p));
 
   const availabilityText = formatAvailabilityText(p.availableFrom);
 
@@ -52,7 +52,7 @@ export function ProductCard({ p }: { p: Product }) {
     <article className="product-card">
       <div className="product-photo">
         <Link href={'/product/' + p.id}>
-          <Photo src={p.preview || undefined} alt={p.title} />
+          <Photo src={p.preview || undefined} alt={p.title} sizes="(max-width: 560px) 46vw, (max-width: 1024px) 24vw, 220px" />
         </Link>
         {availabilityText && (
           <span className="availability-badge">
@@ -428,25 +428,28 @@ export function CartQuantity({
 }
 
 export function QuickProduct({ id, onClose }: { id: number; onClose: () => void }) {
+  const shop = useShop();
+  const [attempt, setAttempt] = useState(0);
   const [p, setP] = useState<Product>();
   const [error, setError] = useState('');
 
   useEffect(() => {
     let alive = true;
-    request('products/' + id)
+    setP(undefined); setError('');
+    request('products/' + id + '?storeId=' + shop.storeId)
       .then((d) => {
         if (alive) setP(product(unwrap(d)));
       })
-      .catch((e) => setError(e.message));
+      .catch((e) => { if (alive) setError(e.message); });
     return () => {
       alive = false;
     };
-  }, [id]);
+  }, [id, shop.storeId, attempt]);
 
   return (
     <Modal title="О товаре" onClose={onClose} wide>
       {error ? (
-        <ErrorMessage message={error} />
+        <ErrorMessage message={error} retry={() => setAttempt(n => n + 1)} />
       ) : p ? (
         <>
           <ProductDetail p={p} />
@@ -463,6 +466,7 @@ export function QuickProduct({ id, onClose }: { id: number; onClose: () => void 
 
 export function ProductDetail({ p: initial, stickyBuy = false }: { p: Product; stickyBuy?: boolean }) {
   const [p, setP] = useState(initial);
+  const variantRequest = useRef(0);
   const [imageIndex, setImage] = useState(0);
   const [selected, setSelected] = useState<Record<number, number[]>>({});
   const s = useShop();
@@ -470,6 +474,7 @@ export function ProductDetail({ p: initial, stickyBuy = false }: { p: Product; s
   const availabilityText = formatAvailabilityText(p.availableFrom);
 
   useEffect(() => {
+    ++variantRequest.current;
     setP(initial);
     setImage(0);
     setSelected({});
@@ -552,9 +557,12 @@ export function ProductDetail({ p: initial, stickyBuy = false }: { p: Product; s
               value={p.id}
               onChange={(e) =>
                 s.run(async () => {
-                  const d = product(unwrap(await request('products/' + e.target.value)));
+                  const version = ++variantRequest.current;
+                  const d = product(unwrap(await request('products/' + e.target.value + '?storeId=' + (p.storeId || s.storeId))));
+                  if (variantRequest.current !== version) return;
                   setP(d);
                   setImage(0);
+                  setSelected({});
                 })
               }
             >
@@ -644,7 +652,7 @@ export function ProductDetail({ p: initial, stickyBuy = false }: { p: Product; s
       {stickyBuy && !missing && (
         <div className="mobile-product-buy-bar" aria-label="Быстрая покупка">
           <div>
-            <small>{p.weight && p.weight > 0 ? `${p.weight} г` : p.measurementUnitLabel || '1 шт'}</small>
+            <small>{p.weight && p.weight > 0 ? `${p.weight} г` : quantityLabel(p, step(p))}</small>
             <strong>{money(p.price)}</strong>
           </div>
           <Buy p={p} supplements={supplements} />

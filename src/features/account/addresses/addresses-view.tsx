@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { MapPin, Plus, Check } from 'lucide-react';
 import { list, unwrap, cartChange, Address } from '@/lib/types';
 import { request } from '@/lib/client';
+import { activateDeliveryAddressForStore } from '@/components/location-sheet';
 import { useShop } from '@/components/shop-context';
 import { Modal, Empty } from '@/components/ui';
 import { useRemote, RemoteState } from '../hooks/use-remote';
@@ -17,22 +18,20 @@ export function AddressesView() {
   const [editingAddress, setEditingAddress] = useState<Partial<Address> | null>(null);
   const [busy, setBusy] = useState(false);
   const [coords, setCoords] = useState<AddressCoordinates | null>(null);
+  const [coordsConfirmed, setCoordsConfirmed] = useState(false);
 
   const addresses = list<Address>(remote.data);
 
   function startEdit(addr: Partial<Address>) {
     setEditingAddress(addr);
-    if (addr.latitude && addr.longitude) {
-      setCoords({ latitude: addr.latitude, longitude: addr.longitude });
-    } else {
-      // Default to Nalchik or previous
-      setCoords({ latitude: 43.4853, longitude: 43.6071 });
-    }
+    // Require a fresh, explicit point selection because older records may contain fallback coordinates.
+    setCoords(null);
+    setCoordsConfirmed(false);
   }
 
   async function activateAddress(id: number) {
     const beforeCart = s.cart;
-    await request(`addresses/${id}/active`, 'PUT');
+    await activateDeliveryAddressForStore(id, s.storeId, addresses.filter(a => a.id === id).map(a => [a.city, a.street, a.houseNumber].filter(Boolean).join(', '))[0]);
     const afterCart = unwrap(await request('cart'));
     await s.refresh();
     await remote.reload();
@@ -50,23 +49,42 @@ export function AddressesView() {
     const formData = new FormData(e.currentTarget);
     const data = Object.fromEntries(formData.entries());
 
+    if (
+      !coords ||
+      !Number.isFinite(coords.latitude) ||
+      !Number.isFinite(coords.longitude) ||
+      coords.latitude < -90 || coords.latitude > 90 ||
+      coords.longitude < -180 || coords.longitude > 180
+    ) {
+      s.notice('Выберите точку доставки на карте');
+      return;
+    }
+    if (!coordsConfirmed) {
+      s.notice('Подтвердите, что точка соответствует указанному адресу');
+      return;
+    }
+
     setBusy(true);
     await s
       .run(async () => {
         const payload = {
           ...data,
-          latitude: coords?.latitude || 43.4853,
-          longitude: coords?.longitude || 43.6071,
+          latitude: coords.latitude,
+          longitude: coords.longitude,
         };
 
-        if (editingAddress.id) {
-          await request(`addresses/${editingAddress.id}`, 'PUT', payload);
-        } else {
-          await request('addresses', 'POST', payload);
-        }
-
+        const saved = unwrap<Address>(await request(
+          editingAddress.id ? `addresses/${editingAddress.id}` : 'addresses',
+          editingAddress.id ? 'PUT' : 'POST', payload,
+        ));
+        // Creation already commits an active address on the backend. Close the
+        // editor before reconciliation so a failed store lookup cannot create a duplicate.
         setEditingAddress(null);
         await remote.reload();
+        if (saved?.isActive) {
+          try { await activateAddress(saved.id); }
+          catch (error) { throw new Error(`Адрес сохранён, но магазин не удалось согласовать: ${(error as Error).message}`); }
+        }
         s.notice('Адрес сохранён');
       })
       .finally(() => setBusy(false));
@@ -181,6 +199,7 @@ export function AddressesView() {
                   defaultValue={editingAddress.city || 'Нальчик'}
                   required
                   placeholder="Нальчик"
+                  onChange={() => setCoordsConfirmed(false)}
                 />
               </label>
 
@@ -191,6 +210,7 @@ export function AddressesView() {
                   defaultValue={editingAddress.street || ''}
                   required
                   placeholder="ул. Ленина"
+                  onChange={() => setCoordsConfirmed(false)}
                 />
               </label>
 
@@ -201,6 +221,7 @@ export function AddressesView() {
                   defaultValue={editingAddress.houseNumber || ''}
                   required
                   placeholder="10"
+                  onChange={() => setCoordsConfirmed(false)}
                 />
               </label>
 
@@ -259,8 +280,20 @@ export function AddressesView() {
                 city={editingAddress.city}
                 street={editingAddress.street}
                 house={editingAddress.houseNumber}
-                onLocationSelect={setCoords}
+                onLocationSelect={(point) => {
+                  setCoords(point);
+                  setCoordsConfirmed(false);
+                }}
               />
+              <label className="address-coordinate-confirmation">
+                <input
+                  type="checkbox"
+                  checked={coordsConfirmed}
+                  onChange={(event) => setCoordsConfirmed(event.target.checked)}
+                  required
+                />
+                Точка на карте соответствует указанным городу, улице и дому
+              </label>
             </div>
 
             <div className="form-buttons-row">

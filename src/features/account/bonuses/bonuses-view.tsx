@@ -32,7 +32,7 @@ export function BonusesView() {
                   </div>
                   <strong className={typeof b.amount === 'number' && b.amount > 0 ? 'accent' : ''}>
                     {typeof b.amount === 'number'
-                      ? (b.amount > 0 ? '+' : '') + (b.amount / 100).toLocaleString('ru-RU')
+                      ? (b.amount > 0 ? '+' : '') + Math.trunc(b.amount).toLocaleString('ru-RU')
                       : '—'}
                   </strong>
                 </div>

@@ -10,12 +10,21 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { storeId } = await req.json();
+    const { storeId, addressId } = await req.json();
     if (!Number.isSafeInteger(storeId)) {
       return NextResponse.json({ message: 'Выберите магазин' }, { status: 422 });
     }
+    if (addressId !== undefined && (!Number.isSafeInteger(addressId) || addressId < 1)) {
+      return NextResponse.json({ message: 'Выберите корректный адрес доставки' }, { status: 422 });
+    }
+    if (addressId !== undefined && !currentSession!.token) {
+      return NextResponse.json({ message: 'Войдите, чтобы выбрать адрес доставки' }, { status: 401 });
+    }
 
-    const stores = await upstream('stores', { token: currentSession!.token });
+    const stores = await upstream(
+      addressId === undefined ? 'stores?perPage=100' : `stores?addressId=${addressId}&perPage=100`,
+      { token: currentSession!.token },
+    );
     const chosen = stores.data?.find(
       (x: { id: number; isActive?: boolean; name?: string }) =>
         x.id === storeId &&

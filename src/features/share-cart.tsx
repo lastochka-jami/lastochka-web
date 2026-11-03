@@ -6,15 +6,12 @@ import { useRouter } from 'next/navigation';
 import { ShoppingBasket, ArrowRight, Loader2, CheckCircle2, ChevronLeft } from 'lucide-react';
 import { useShop } from '@/components/shop-context';
 import { request } from '@/lib/client';
-import { product, Product, money, unwrap } from '@/lib/types';
+import { product, Product, money, unwrap, step, itemAmount, quantityLabel } from '@/lib/types';
 import { addGuestCartItem, saveGuestCart, getGuestCart } from '@/lib/guest-cart';
+import { parseSharedCart, SharedItem } from '@/lib/shared-cart';
 import { Photo } from '@/components/ui';
 
-interface ShareItem {
-  id: number;
-  quantity: number;
-  product?: Product;
-}
+interface ShareItem extends SharedItem { product?: Product; }
 
 export function ShareCartView() {
   const router = useRouter();
@@ -41,43 +38,34 @@ export function ShareCartView() {
       return;
     }
 
-    // Format: 2035:1,12486:2,236:1
-    const rawPairs = hash.split(',').filter(Boolean);
-    const parsed: ShareItem[] = [];
-
-    for (const pair of rawPairs) {
-      const [idStr, qtyStr] = pair.split(':');
-      const id = Number(idStr);
-      const quantity = Math.max(1, Number(qtyStr) || 1);
-      if (Number.isSafeInteger(id) && id > 0) {
-        parsed.push({ id, quantity });
-      }
-    }
-
-    if (!parsed.length) {
-      setError('В полученной ссылке не найдено товаров');
-      setLoading(false);
-      return;
-    }
-
+    let parsed: ShareItem[];
+    try { parsed = parseSharedCart(hash); }
+    catch (e) { setError((e as Error).message); setLoading(false); return; }
+    let alive = true;
     // Fetch product details for each item
     Promise.all(
       parsed.map(async (item) => {
         try {
-          const res = await request<any>(`products/${item.id}`);
+          const res = await request<any>(`products/${item.id}?storeId=${item.storeId}`);
           const prodData = unwrap<any>(res);
-          return {
-            ...item,
-            product: product(prodData),
-          };
+          if (prodData.storeId && Number(prodData.storeId) !== item.storeId) throw new Error('Магазин товара изменился');
+          const p = product({ ...prodData, storeId: item.storeId });
+          if (item.quantity % step(p)) throw new Error('Количество не соответствует шагу');
+          if (p.supplements.some(s => s.isRequired && !item.supplements.some(selected => selected.supplementId === s.id))) throw new Error('Не выбраны обязательные добавки');
+          for (const selected of item.supplements) {
+            const definition = p.supplements.find(s => s.id === selected.supplementId);
+            if (!definition || selected.valueIds.some(id => !definition.values.some(v => v.id === id))) throw new Error('Добавки недоступны');
+          }
+          return { ...item, product: p };
         } catch {
           return item;
         }
       }),
     )
       .then((loaded) => {
+        if (!alive) return;
         const valid = loaded.filter((it) => it.product);
-        if (!valid.length) {
+        if (valid.length !== parsed.length) {
           setError('Товары из этой ссылки больше недоступны или перемещены');
         } else {
           setItems(valid);
@@ -89,6 +77,7 @@ export function ShareCartView() {
         setError('Не удалось загрузить товары из ссылки');
         setLoading(false);
       });
+    return () => { alive = false; };
   }, []);
 
   async function handleAddAllToCart() {
@@ -96,28 +85,26 @@ export function ShareCartView() {
     setAdding(true);
 
     try {
-      if (s.authenticated) {
-        // Add items sequentially or via batch
-        for (const it of items) {
-          if (!it.product) continue;
+      for (let index = 0; index < items.length; index++) {
+        const it = items[index];
+        if (!it.product) continue;
+        const key = 'shared-import:' + JSON.stringify(items.map(i => [i.id, i.quantity, i.storeId, i.supplements])) + ':' + index;
+        const status = localStorage.getItem(key);
+        if (status === 'done') continue;
+        if (s.authenticated) {
+          const pending = status ? JSON.parse(status) : { key: crypto.randomUUID(), createdAt: Date.now() };
+          if (Date.now() - pending.createdAt > 23 * 60 * 60 * 1000) throw new Error('Срок безопасного повтора истёк. Проверьте корзину с магазином перед повторным импортом.');
+          const retryKey = pending.key;
+          localStorage.setItem(key, JSON.stringify(pending));
           await request('cart/items', 'POST', {
-            productId: it.product.id,
-            quantity: it.quantity,
-            storeId: it.product.storeId || 2,
-          });
+            productId: it.id, quantity: it.quantity, storeId: it.storeId, supplements: it.supplements,
+          }, { idempotencyKey: retryKey });
+        } else {
+          addGuestCartItem(it.product, it.supplements, it.quantity);
         }
-        await s.refresh();
-      } else {
-        // Add to guest cart
-        for (const it of items) {
-          if (!it.product) continue;
-          // Apply quantity
-          for (let step = 0; step < it.quantity; step++) {
-            addGuestCartItem(it.product);
-          }
-        }
-        await s.refresh();
+        localStorage.setItem(key, 'done');
       }
+      await s.refresh();
 
       setAdded(true);
       s.notice('Товары добавлены в корзину');
@@ -132,7 +119,7 @@ export function ShareCartView() {
   }
 
   const grandTotal = items.reduce((acc, it) => {
-    return acc + (it.product?.price || 0) * it.quantity;
+    return acc + (it.product ? itemAmount({ ...it, product: it.product }) : 0);
   }, 0);
 
   return (
@@ -172,7 +159,7 @@ export function ShareCartView() {
           <>
             <div className="share-cart-list">
               {items.map((it) => (
-                <div key={it.id} className="share-cart-item">
+                <div key={`${it.storeId}:${it.id}:${JSON.stringify(it.supplements)}`} className="share-cart-item">
                   <div className="share-cart-item-photo">
                     <Photo
                       src={it.product?.preview || undefined}
@@ -189,9 +176,9 @@ export function ShareCartView() {
                       {it.product?.title}
                     </Link>
                     <div className="share-cart-item-meta">
-                      <span className="share-cart-item-qty">{it.quantity} шт</span>
+                      <span className="share-cart-item-qty">{it.product ? quantityLabel(it.product, it.quantity) : it.quantity}</span>
                       <span className="share-cart-item-price">
-                        {money((it.product?.price || 0) * it.quantity)}
+                        {money(it.product ? itemAmount({ ...it, product: it.product }) : 0)}
                       </span>
                     </div>
                   </div>
@@ -201,7 +188,7 @@ export function ShareCartView() {
 
             <div className="share-cart-summary">
               <div className="share-cart-total-row">
-                <span>Итого к переносу:</span>
+                <span>Предварительно:</span>
                 <strong>{money(grandTotal)}</strong>
               </div>
 

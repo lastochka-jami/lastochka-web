@@ -40,6 +40,7 @@ export interface Store {
   isActive?: boolean;
   isPickupEnabled?: boolean;
   pickupPaymentMethods?: string[];
+  minOrderAmount?: number;
 }
 
 export interface Address {
@@ -66,6 +67,8 @@ export interface SupplementValue {
   title?: string;
   name?: string;
   price?: number;
+  isFromCatalog?: boolean;
+  quantity?: number;
 }
 
 export interface Supplement {
@@ -124,6 +127,9 @@ export interface CartItem {
   product: Product;
   supplements?: Array<{ supplementId: number; valueIds: number[] }> | unknown[];
   stockWarning?: string;
+  supplementsTotal?: number;
+  transferKey?: string;
+  transferStartedAt?: number;
 }
 
 export interface CartStoreGroup {
@@ -138,6 +144,9 @@ export interface CartStoreGroup {
   bonus?: {
     isEnabled?: boolean;
     balance?: number;
+    userBalance?: number;
+    maxSpend?: number;
+    maxEarn?: number;
   };
 }
 
@@ -804,4 +813,22 @@ export function getCategoryGroupColor(category: Partial<Category> | string): str
 
   // Дефолтный фон для прочих категорий: #F6EEE3 (мягкий нейтральный крем)
   return '#F6EEE3';
+}
+
+/** Prices are per portion; quantity is stored in the product's cart units. */
+export function itemAmount(item: Pick<CartItem, 'product' | 'quantity' | 'price' | 'supplements' | 'supplementsTotal'>): number {
+  const portions = Math.floor(item.quantity / step(item.product));
+  let extras = item.supplementsTotal;
+  if (extras === undefined) {
+    extras = (item.supplements || []).reduce<number>((sum, raw: any) => {
+      const definition = item.product.supplements?.find(s => s.id === raw.supplementId);
+      const ids = raw.valueIds || raw.values?.map((v: any) => v.id) || [];
+      return sum + ids.reduce((n: number, id: number) => {
+        const value = definition?.values.find(v => v.id === id);
+        const count = raw.valueQuantities?.find((v: any) => v.valueId === id)?.quantity ?? 1;
+        return n + Number(value?.price || 0) * count;
+      }, 0) * portions;
+    }, 0);
+  }
+  return Math.round(((item.price ?? item.product.price ?? 0) * portions + extras) * 100) / 100;
 }

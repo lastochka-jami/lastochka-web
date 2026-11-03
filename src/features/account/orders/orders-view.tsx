@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { Package, ChevronRight, FileText, RefreshCw, AlertCircle } from 'lucide-react';
 import { list, unwrap, money, OrderDto, OrderItemDto } from '@/lib/types';
@@ -36,40 +36,61 @@ const statusLabels: Record<string, string> = {
 };
 
 export function OrdersView({
-  id,
+  id: requestedId,
   paymentReturn = false,
 }: {
   id?: string;
   paymentReturn?: boolean;
 }) {
-  const remote = useRemote<any>(id ? `orders/${id}` : 'orders?perPage=50');
+  const [storedId, setStoredId] = useState<string>();
+  useEffect(() => {
+    if (!paymentReturn || requestedId) return;
+    const stored = sessionStorage.getItem('last-order');
+    if (stored && /^\d+$/.test(stored)) setStoredId(stored);
+  }, [paymentReturn, requestedId]);
+  const id = requestedId || storedId;
+  const remote = useRemote<any>(id ? `orders/${id}` : !paymentReturn ? 'orders?perPage=50' : null);
   const paymentStatus = useRemote<any>(id ? `orders/${id}/payment-status` : null);
   const receipts = useRemote<any>(id ? `orders/${id}/receipts` : null);
   const s = useShop();
-
   const order = id ? unwrap<OrderDto>(remote.data) : null;
   const ordersList = !id ? list<OrderDto>(remote.data) : [];
+  const orderId = id;
+  const reloadOrder = remote.reload;
+  const reloadPaymentStatus = paymentStatus.reload;
+  const pollingState = useRef({ isPaid: false, status: '', paymentState: '' });
+
+  pollingState.current = {
+    isPaid: Boolean(order?.isPaid || unwrap<any>(paymentStatus.data)?.isPaid),
+    status: order?.status || unwrap<any>(paymentStatus.data)?.status || '',
+    paymentState: unwrap<any>(paymentStatus.data)?.paymentState || '',
+  };
 
   useEffect(() => {
-    if (!id || !paymentReturn) return;
+    if (!paymentReturn || !id) return;
     let count = 0;
     const interval = setInterval(() => {
-      if (count++ >= 12) {
+      const current = pollingState.current;
+      const terminal = ['cancelled', 'canceled', 'delivered', 'completed', 'failed'].includes(
+        current.status,
+      ) || ['failed', 'cancelled', 'confirmed'].includes(current.paymentState);
+      if (current.isPaid || terminal || count >= 12) {
         clearInterval(interval);
         return;
       }
-      void remote.reload();
-      void paymentStatus.reload();
+      count += 1;
+      void reloadOrder();
+      void reloadPaymentStatus();
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [id, paymentReturn, remote, paymentStatus]);
+  }, [id, paymentReturn, reloadOrder, reloadPaymentStatus]);
 
   return (
     <div className="account-section">
       <div className="section-header">
-        <h1>{id ? `Заказ № ${id}` : 'Мои заказы'}</h1>
-        {id && (
+        <h1>{orderId ? `Заказ № ${orderId}` : 'Мои заказы'}</h1>
+        {orderId && (
           <Link href="/orders" className="text-button">
             ← Ко всем заказам
           </Link>
@@ -79,12 +100,13 @@ export function OrdersView({
       {paymentReturn && (
         <div className="notice-banner">
           <AlertCircle size={18} />
-          <span>Возвращение со шлюза оплаты. Актуальный статус заказа получен от магазина ниже.</span>
+          <span>Возвращение со шлюза оплаты. Проверяем статус заказа в магазине.</span>
         </div>
       )}
 
+      {paymentReturn && !id && <p className="error">В ссылке нет номера заказа. Откройте нужный заказ в <Link href="/orders">истории заказов</Link>.</p>}
       <RemoteState r={remote}>
-        {id && order ? (
+        {orderId && order ? (
           <div className="order-detail-layout">
             <div className="panel order-card-main">
               <div className="order-status-row">
@@ -116,14 +138,33 @@ export function OrdersView({
 
               <div className="order-items-list">
                 <h3>Состав заказа</h3>
-                {order.items?.map((item: OrderItemDto) => (
-                  <div className="order-item-row" key={item.id}>
-                    <span>
-                      {item.product?.title || item.title || item.productTitle} × {item.quantity}
-                    </span>
-                    <strong>{money(item.total ?? item.price)}</strong>
-                  </div>
-                ))}
+                {order.items?.map((item: OrderItemDto) => {
+                  const orderItem = item as OrderItemDto & {
+                    displayQuantity?: string;
+                    measurementUnitLabel?: string;
+                    supplements?: Array<{
+                      title?: string | null;
+                      values?: Array<{ title?: string; quantity?: number }>;
+                    }>;
+                  };
+                  const quantity = orderItem.displayQuantity ||
+                    `${item.quantity}${orderItem.measurementUnitLabel ? ` ${orderItem.measurementUnitLabel}` : ''}`;
+                  return (
+                    <div className="order-item-row" key={item.id}>
+                      <div>
+                        <span>{item.product?.title || item.title || item.productTitle} × {quantity}</span>
+                        {orderItem.supplements?.map((supplement, index) => {
+                          const values = supplement.values?.map((value) =>
+                            `${value.title || ''}${value.quantity && value.quantity > 1 ? ` × ${value.quantity}` : ''}`,
+                          ).filter(Boolean).join(', ');
+                          const label = [supplement.title, values].filter(Boolean).join(': ');
+                          return label ? <small className="muted" key={`${item.id}-supp-${index}`}>{label}</small> : null;
+                        })}
+                      </div>
+                      <strong>{money(item.total ?? item.price)}</strong>
+                    </div>
+                  );
+                })}
               </div>
 
               <dl className="totals">
@@ -145,6 +186,12 @@ export function OrdersView({
                     <dd>{money(order.deliveryCost)}</dd>
                   </>
                 )}
+                {typeof (order as any).assemblyCost === 'number' && (
+                  <>
+                    <dt>Сборка</dt>
+                    <dd>{money((order as any).assemblyCost)}</dd>
+                  </>
+                )}
                 <dt>Итого к оплате</dt>
                 <dd>
                   <strong>{money(order.total)}</strong>
@@ -163,7 +210,7 @@ export function OrdersView({
                   <RefreshCw size={16} /> Обновить статус
                 </button>
 
-                {!order.isPaid &&
+                {id && !order.isPaid &&
                   ['draft', 'pending', 'new', 'awaiting_payment'].includes(order.status) && (
                     <button
                       className="primary"

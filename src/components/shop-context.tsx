@@ -23,6 +23,7 @@ export interface ShopContextValue {
   authenticated: boolean;
   ready: boolean;
   cart: Cart | null;
+  cartError: string;
   refresh: () => Promise<void>;
   login: () => void;
   run: <T>(f: () => Promise<T>) => Promise<T | undefined>;
@@ -32,6 +33,7 @@ export interface ShopContextValue {
   logout: () => Promise<void>;
   checkoutEnabled: boolean;
   publicOrigin: string;
+  storeId: number;
 }
 
 const Context = createContext<ShopContextValue>(null!);
@@ -42,16 +44,20 @@ export function ShopProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [authenticated, setAuth] = useState(false);
   const [ready, setReady] = useState(false);
+  const [cartError, setCartError] = useState('');
   const [cart, setCart] = useState<Cart | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [checkoutEnabled, setCheckout] = useState(false);
   const [publicOrigin, setPublicOrigin] = useState('');
+  const [storeId, setStoreId] = useState(2);
 
   const refresh = useCallback(async () => {
+    setCartError('');
     try {
       const sessionData = await browserSession();
       setAuth(sessionData.authenticated);
+      setStoreId(sessionData.storeId);
       setCheckout(sessionData.checkoutEnabled);
       setPublicOrigin(sessionData.publicOrigin);
       setReady(true);
@@ -60,17 +66,26 @@ export function ShopProvider({ children }: { children: ReactNode }) {
         try {
           const serverCart = unwrap<Cart>(await request('cart'));
           setCart(serverCart);
-        } catch (err) {
+        } catch (err: any) {
+          setCartError(err.message || 'Не удалось загрузить корзину');
+          if (err?.status === 401) { setAuth(false); setCart(getGuestCart()); setAuthOpen(true); }
           setMessage((err as Error).message);
         }
       } else {
         // Load guest cart from local storage
         setCart(getGuestCart());
       }
-    } catch {
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Не удалось загрузить сессию");
       setReady(true);
       setCart(getGuestCart());
     }
+  }, []);
+
+  useEffect(() => {
+    const expired = () => { setAuth(false); setCart(getGuestCart()); setAuthOpen(true); };
+    window.addEventListener('lastochka:unauthorized', expired);
+    return () => window.removeEventListener('lastochka:unauthorized', expired);
   }, []);
 
   useEffect(() => {
@@ -88,6 +103,8 @@ export function ShopProvider({ children }: { children: ReactNode }) {
       return await f();
     } catch (err: any) {
       if (err?.status === 401) {
+        setAuth(false);
+        setCart(getGuestCart());
         setAuthOpen(true);
       } else {
         setMessage(err instanceof Error ? err.message : 'Произошла ошибка');
@@ -99,9 +116,11 @@ export function ShopProvider({ children }: { children: ReactNode }) {
   async function add(p: Product, supplements?: unknown[]) {
     if (!authenticated) {
       // Guest cart addition
-      const updated = addGuestCartItem(p, supplements);
-      setCart(updated);
-      setMessage('Товар добавлен в корзину');
+      try {
+        const updated = addGuestCartItem({ ...p, storeId: p.storeId || storeId }, supplements);
+        setCart(updated);
+        setMessage('Товар добавлен в корзину');
+      } catch (e) { setMessage((e as Error).message); }
       return;
     }
 
@@ -122,8 +141,7 @@ export function ShopProvider({ children }: { children: ReactNode }) {
   async function setQuantity(id: number, n: number, p?: Product) {
     if (!authenticated) {
       // Guest cart quantity update
-      const updated = setGuestCartQuantity(id, n, p);
-      setCart(updated);
+      try { setCart(setGuestCartQuantity(id, n, p)); } catch (e) { setMessage((e as Error).message); }
       return;
     }
 
@@ -152,7 +170,8 @@ export function ShopProvider({ children }: { children: ReactNode }) {
   const handleLoginSuccess = async () => {
     setAuthOpen(false);
     // Merge guest cart items into authenticated user's cart
-    await mergeGuestCartToServer();
+    const result = await mergeGuestCartToServer();
+    if (result.remaining) setMessage(`Перенесено позиций: ${result.accepted}. Не перенесено: ${result.remaining}. Они сохранены на устройстве; повторите перенос в корзине.`);
     await refresh();
     router.refresh();
   };
@@ -163,6 +182,7 @@ export function ShopProvider({ children }: { children: ReactNode }) {
         authenticated,
         ready,
         cart,
+        cartError,
         refresh,
         login: () => setAuthOpen(true),
         run,
@@ -172,6 +192,7 @@ export function ShopProvider({ children }: { children: ReactNode }) {
         logout,
         checkoutEnabled,
         publicOrigin,
+        storeId,
       }}
     >
       {children}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import QRCode from 'qrcode';
+import { encodeSharedCart } from '@/lib/shared-cart';
 import { Copy, Check, X, Share2 } from 'lucide-react';
 import { CartItem } from '@/lib/types';
 import { useShop } from './shop-context';
@@ -21,11 +21,9 @@ export function ShareCartModal({ isOpen, onClose, items }: ShareCartModalProps) 
   useEffect(() => {
     if (!isOpen || !items.length) return;
 
-    const pairs = items
-      .filter((it) => (it.product?.id || it.id) && it.quantity > 0)
-      .map((it) => `${it.product?.id || it.id}:${it.quantity}`)
-      .join(',');
-
+    let pairs: string;
+    try { pairs = encodeSharedCart(items); }
+    catch (e) { s.notice((e as Error).message); return; }
     const origin =
       typeof window !== 'undefined'
         ? window.location.origin
@@ -34,7 +32,7 @@ export function ShareCartModal({ isOpen, onClose, items }: ShareCartModalProps) 
 
     setShareLink(link);
 
-    QRCode.toDataURL(link, {
+    import('qrcode').then(({ default: QRCode }) => QRCode.toDataURL(link, {
       width: 280,
       margin: 2,
       color: {
@@ -42,7 +40,7 @@ export function ShareCartModal({ isOpen, onClose, items }: ShareCartModalProps) 
         light: '#ffffffff',
       },
       errorCorrectionLevel: 'M',
-    })
+    }))
       .then((url) => setQrUrl(url))
       .catch((err) => console.error('QR generation error:', err));
   }, [isOpen, items]);

@@ -33,9 +33,6 @@ export function AddressPickerMap({
     Array<{ display_name: string; lat: string; lon: string }>
   >([]);
 
-  const defaultLat = lat || 43.4853; // Nalchik default
-  const defaultLng = lng || 43.6071;
-
   const handleGeolocation = () => {
     if (!navigator.geolocation) {
       s.notice('Геолокация недоступна в вашем браузере');
@@ -57,8 +54,7 @@ export function AddressPickerMap({
     );
   };
 
-  const handleAddressSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAddressSearch = async () => {
     const query = searchQuery || [city, street, house].filter(Boolean).join(', ');
     if (!query || query.length < 3) {
       s.notice('Введите адрес для поиска');
@@ -95,10 +91,9 @@ export function AddressPickerMap({
     s.notice('Точка на карте зафиксирована');
   };
 
-  const currentLat = lat || defaultLat;
-  const currentLng = lng || defaultLng;
-
-  const embedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${currentLng - 0.008}%2C${currentLat - 0.005}%2C${currentLng + 0.008}%2C${currentLat + 0.005}&layer=mapnik&marker=${currentLat}%2C${currentLng}`;
+  const embedUrl = lat !== undefined && lng !== undefined
+    ? `https://www.openstreetmap.org/export/embed.html?bbox=${lng - 0.008}%2C${lat - 0.005}%2C${lng + 0.008}%2C${lat + 0.005}&layer=mapnik&marker=${lat}%2C${lng}`
+    : null;
 
   return (
     <div className="address-picker-container">
@@ -111,7 +106,7 @@ export function AddressPickerMap({
           <Navigation size={16} /> Моё местоположение
         </button>
 
-        <form className="address-search-form" onSubmit={handleAddressSearch}>
+        <div className="address-search-form">
           <input
             type="text"
             placeholder={
@@ -119,11 +114,17 @@ export function AddressPickerMap({
             }
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                void handleAddressSearch();
+              }
+            }}
           />
-          <button type="submit" className="secondary" disabled={searching}>
+          <button type="button" className="secondary" disabled={searching} onClick={() => void handleAddressSearch()}>
             <Search size={16} />
           </button>
-        </form>
+        </div>
       </div>
 
       {searchResults.length > 0 && (
@@ -143,14 +144,14 @@ export function AddressPickerMap({
       )}
 
       <div className="interactive-map-frame">
-        <iframe
+        {embedUrl ? <iframe
           title="Выбор точки доставки на карте"
           src={embedUrl}
           loading="lazy"
           className="osm-iframe"
-        />
+        /> : <div className="map-empty-state">Выберите точку с помощью поиска или геолокации, чтобы увидеть её на карте.</div>}
         <div className="map-badge">
-          {lat && lng ? (
+          {lat !== undefined && lng !== undefined ? (
             <span>
               <Check size={14} /> Точка доставки выбрана ({lat}, {lng})
             </span>
