@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, ReactNode } from 'react';
+import { useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { request } from '@/lib/client';
 import { ErrorMessage } from '@/components/ui';
 
@@ -12,29 +12,62 @@ export interface RemoteStateResult<T = any> {
 }
 
 export function useRemote<T = any>(path: string | null): RemoteStateResult<T> {
-  const [data, setData] = useState<T>();
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(!!path);
+  const [state, setState] = useState<{
+    path: string | null;
+    data: T | undefined;
+    error: string;
+    loading: boolean;
+  }>({ path, data: undefined, error: '', loading: !!path });
+  const requestId = useRef(0);
 
   const load = useCallback(async () => {
-    if (!path) return;
-    setLoading(true);
-    setError('');
+    const id = ++requestId.current;
+    if (!path) {
+      setState({ path: null, data: undefined, error: '', loading: false });
+      return;
+    }
+    setState((current) => ({
+      path,
+      data: current.path === path ? current.data : undefined,
+      error: '',
+      loading: true,
+    }));
     try {
       const response = await request<T>(path);
-      setData(response);
+      if (requestId.current === id) {
+        setState({ path, data: response, error: '', loading: false });
+      }
     } catch (e: any) {
-      setError(e instanceof Error ? e.message : 'Не удалось загрузить данные');
-    } finally {
-      setLoading(false);
+      if (requestId.current === id) {
+        setState({
+          path,
+          data: undefined,
+          error: e instanceof Error ? e.message : 'Не удалось загрузить данные',
+          loading: false,
+        });
+      }
     }
   }, [path]);
 
   useEffect(() => {
+    if (!path) {
+      ++requestId.current;
+      setState({ path: null, data: undefined, error: '', loading: false });
+      return;
+    }
     void load();
-  }, [load]);
+    return () => {
+      ++requestId.current;
+    };
+  }, [load, path]);
 
-  return { data, error, loading, reload: load };
+  const current = state.path === path ? state : {
+    path,
+    data: undefined,
+    error: '',
+    loading: !!path,
+  };
+  return { data: current.data, error: current.error, loading: current.loading, reload: load };
 }
 
 export function RemoteState<T = any>({

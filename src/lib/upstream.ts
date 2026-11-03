@@ -15,6 +15,7 @@ export interface UpstreamOptions {
   method?: string;
   body?: unknown;
   token?: string | null;
+  idempotencyKey?: string;
   cache?: RequestCache;
   revalidate?: number;
 }
@@ -25,8 +26,9 @@ export async function upstream(path: string, init: UpstreamOptions = {}) {
 
   const headers: Record<string, string> = {
     Accept: 'application/json',
-    ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+    ...(init.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
     ...(init.token ? { Authorization: `Bearer ${init.token}` } : {}),
+    ...(init.idempotencyKey ? { 'Idempotency-Key': init.idempotencyKey } : {}),
   };
 
   const isPublicGet = (!init.method || init.method === 'GET') && !init.token;
@@ -35,12 +37,14 @@ export async function upstream(path: string, init: UpstreamOptions = {}) {
   const fetchOptions: RequestInit = {
     method: init.method || 'GET',
     headers,
-    body: init.body ? JSON.stringify(init.body) : undefined,
+    body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
     signal: AbortSignal.timeout(15000),
     redirect: 'error',
   };
 
-  if (revalidate !== undefined) {
+  if (init.cache === 'no-store') {
+    fetchOptions.cache = 'no-store';
+  } else if (revalidate !== undefined) {
     (fetchOptions as any).next = { revalidate };
   } else if (init.cache) {
     fetchOptions.cache = init.cache;

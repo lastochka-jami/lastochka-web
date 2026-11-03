@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import routes from '../src/config/routes.json';
 import {list,money,product,quantityLabel,step,truth,unwrap,normalizeMedia,categoryMedia,cartItems,cartChange,activeStoreId,formatAvailabilityText,getCategoryGroupColor} from '../src/lib/types';
-import {paymentReturnUrl} from '../src/lib/client';
+import {paymentReturnUrl,request} from '../src/lib/client';
 
 test('matches exact reference palette for all 17 categories and fallback', () => {
   assert.equal(getCategoryGroupColor('xleb-i-vypechka'), '#FDE6D2');
@@ -34,6 +34,37 @@ test('payment callbacks always use the configured canonical origin',()=>{
   assert.equal(paymentReturnUrl('/cards?binding=return','https://lastochka.duckdns.org'), 'https://lastochka.duckdns.org/cards?binding=return');
   assert.equal(paymentReturnUrl('/payment','http://127.0.0.1:3000'), 'http://127.0.0.1:3000/payment');
   assert.throws(()=>paymentReturnUrl('/cards','javascript:alert(1)'),/безопасный адрес/);
+});
+
+test('client mutation sends idempotency key and refreshes CSRF once after 403', async()=>{
+  const originalFetch = globalThis.fetch;
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    calls.push({ url, init });
+    if (url === '/api/session') {
+      const csrf = calls.filter((call) => call.url === url).length === 1 ? 'old' : 'fresh';
+      return Response.json({ csrf });
+    }
+    if (calls.filter((call) => call.url === url).length === 1) {
+      return Response.json({ message: 'Сессия страницы истекла. Обновите страницу.' }, { status: 403 });
+    }
+    return Response.json({ ok: true });
+  }) as typeof fetch;
+
+  try {
+    const result = await request<{ ok: boolean }>('orders', 'POST', { total: 10 }, {
+      idempotencyKey: 'checkout-1',
+    });
+    assert.deepEqual(result, { ok: true });
+    const mutations = calls.filter((call) => call.url === '/api/shop/orders');
+    assert.equal(mutations.length, 2);
+    assert.equal(new Headers(mutations[0].init?.headers).get('Idempotency-Key'), 'checkout-1');
+    assert.equal(new Headers(mutations[0].init?.headers).get('x-csrf-token'), 'old');
+    assert.equal(new Headers(mutations[1].init?.headers).get('x-csrf-token'), 'fresh');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test('normalizes documented and observed API wrappers',()=>{
