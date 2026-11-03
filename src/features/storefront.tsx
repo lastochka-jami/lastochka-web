@@ -10,7 +10,6 @@ import {
   categoryMedia,
   ProductGroupDto,
   BannerDto,
-  StoryDto,
   Product,
   getCategoryGroupColor,
 } from '@/lib/types';
@@ -23,10 +22,16 @@ import { Reviews } from './account/reviews/reviews-view';
 import { InteractiveCategorySection } from '@/components/interactive-category-section';
 import { CategoryFallback } from '@/components/category-fallback';
 import { LocationTrigger } from '@/components/location-sheet';
+import { bannerHref, catalogPageHref } from '@/lib/storefront-links';
 
 export { getCategoryGroupColor };
 
-
+type StorefrontStoryDto = {
+  id: number;
+  title: string;
+  thumbnailImage?: { path: string } | null;
+  images?: Array<{ path: string; type?: string; mimeType?: string }>;
+};
 
 export function SectionHeading({
   title,
@@ -55,10 +60,10 @@ export function SectionHeading({
 export async function Home() {
   const id = await selectedStore();
   const [groups, categories, banners, stories] = await Promise.all([
-    publicApi(`stores/${id}/product-groups`).then(list<ProductGroupDto>).catch(() => []),
-    publicApi(`stores/${id}/categories`).then(list<Category>).catch(() => []),
-    publicApi(`stores/${id}/banners`).then(list<BannerDto>).catch(() => []),
-    publicApi('stories').then(list<StoryDto>).catch(() => []),
+    publicApi(`stores/${id}/product-groups`).then(list<ProductGroupDto>),
+    publicApi(`stores/${id}/categories?includeChildren=true&perPage=100`).then(list<HomeCategory>),
+    publicApi(`stores/${id}/banners`).then(list<BannerDto>),
+    publicApi('stories').then(list<StorefrontStoryDto>),
   ]);
 
   const recommended = groups.filter((g) => g.is_recommended);
@@ -66,28 +71,14 @@ export async function Home() {
     groups.find((g) => g.slug === 'firmennye-bliuda') ||
     groups.find((g) => !g.is_recommended && (g.productsCount || 0) > 0);
 
-  const [featuredProducts, showcaseChildren] = await Promise.all([
-    featured
-      ? publicApi(`product-groups/${featured.id}/products?storeId=${id}&perPage=8`)
-          .then(list)
-          .then((l) => l.map(product))
-          .catch(() => [] as Product[])
-      : Promise.resolve([] as Product[]),
-    // Fetch children of top parent categories to ensure every showcase tile has a quality image
-    Promise.all(
-      categories.slice(0, 4).map((c) =>
-        publicApi(`stores/${id}/categories/${c.id}/children`)
-          .then(list<Category>)
-          .catch(() => [] as Category[]),
-      ),
-    ),
-  ]);
+  const featuredProducts = featured
+    ? list<Product>(await publicApi(`product-groups/${featured.id}/products?storeId=${id}&perPage=8`)).map(product)
+    : [];
 
   // Extract showcase tiles with real images
-  const showcaseSubcategories: Category[] = [];
-  showcaseChildren.forEach((children) => {
-    showcaseSubcategories.push(...children.slice(0, 2));
-  });
+  const showcaseSubcategories = categories
+    .slice(0, 4)
+    .flatMap((c) => (c.children || []).slice(0, 2));
   const showcase =
     showcaseSubcategories.length >= 3 ? showcaseSubcategories.slice(0, 6) : categories.slice(0, 6);
 
@@ -113,19 +104,51 @@ export async function Home() {
           <div className="stories">
             {stories.map((st) => (
               <Link href={'/stories/' + st.id} key={st.id}>
-                <Photo src={st.image?.path || st.preview?.path} alt={st.title} />
+                <Photo
+                  src={st.thumbnailImage?.path || st.images?.[0]?.path}
+                  alt={st.title}
+                />
                 <span>{st.title}</span>
               </Link>
             ))}
           </div>
         )}
 
-        {showcase.length > 0 && (
-          <section className="home-showcase-section">
-            <SectionHeading title="Популярные категории" href="/catalog" />
-            <CategoryTiles categories={showcase} />
+        {banners.length > 0 && (
+          <section className="home-banners-section" aria-label="Акции магазина">
+            <div className="collections home-banners">
+              {banners.map((banner) => {
+                const href = bannerHref(banner);
+                const content = (
+                  <>
+                    <Photo src={banner.image?.path} alt={banner.title} />
+                    <strong>{banner.title}</strong>
+                  </>
+                );
+                return href ? (
+                  <Link href={href} className="collection-tile home-banner" key={banner.id}>
+                    {content}
+                  </Link>
+                ) : (
+                  <div className="collection-tile home-banner" key={banner.id}>
+                    {content}
+                  </div>
+                );
+              })}
+            </div>
           </section>
         )}
+
+        <section className="home-showcase-section">
+          {showcase.length > 0 ? (
+            <>
+              <SectionHeading title="Популярные категории" href="/catalog" />
+              <CategoryTiles categories={showcase} />
+            </>
+          ) : (
+            <p className="muted">Категории пока не добавлены.</p>
+          )}
+        </section>
 
         {/* Featured promo collections on Home */}
         {recommended.length > 0 && (
@@ -149,7 +172,7 @@ export async function Home() {
           </section>
         )}
 
-        {featuredProducts.length > 0 && (
+        {featured && featuredProducts.length > 0 && (
           <section>
             <SectionHeading
               title={featured?.title || 'Хиты продаж'}
@@ -223,40 +246,27 @@ export function CategoryTiles({
   );
 }
 
-async function findCategoryPath(
-  store: number,
-  roots: Category[],
+type HomeCategory = Category & { children?: HomeCategory[] };
+
+function findCategoryPathInTree(
+  roots: HomeCategory[],
   target: string,
-  maxDepth = 5,
-): Promise<Category[] | null> {
-  const direct = roots.find((c) => String(c.id) === target || c.slug === target);
-  if (direct) return [direct];
-
-  async function visit(parent: Category, depth: number): Promise<Category[] | null> {
-    if (depth >= maxDepth) return null;
-    const children = list<Category>(await publicApi(`stores/${store}/categories/${parent.id}/children`));
-    const found = children.find((c) => String(c.id) === target || c.slug === target);
-    if (found) return [parent, found];
-
-    for (const child of children.filter((c) => !c.isLeaf)) {
-      const nested = await visit(child, depth + 1);
-      if (nested) return [parent, ...nested];
+): Category[] | null {
+  function visit(nodes: HomeCategory[], parents: Category[]): Category[] | null {
+    for (const node of nodes) {
+      const path = [...parents, node];
+      if (String(node.id) === target || node.slug === target) return path;
+      const nested = visit(node.children || [], path);
+      if (nested) return nested;
     }
     return null;
   }
-
-  for (const root of roots) {
-    const path = await visit(root, 0);
-    if (path) return path;
-  }
-  return null;
+  return visit(roots, []);
 }
 
-async function CatalogCategorySection({ store, category }: { store: number; category: Category }) {
+async function CatalogCategorySection({ store, category }: { store: number; category: HomeCategory }) {
   const groupBg = getCategoryGroupColor(category);
-  const children = await publicApi(`stores/${store}/categories/${category.id}/children`)
-    .then(list<Category>)
-    .catch(() => [] as Category[]);
+  const children = category.children || [];
 
   const tilesToRender = children.length ? children : [category];
 
@@ -274,20 +284,11 @@ async function CatalogCategorySection({ store, category }: { store: number; cate
   );
 }
 
-function RootCatalog({ store, categories }: { store: number; categories: Category[] }) {
+function RootCatalog({ store, categories }: { store: number; categories: HomeCategory[] }) {
   if (!categories || categories.length === 0) {
     return (
       <div className="catalog-sections">
-        <section className="catalog-category-section category-loading">
-          <div className="section-heading">
-            <h2>Каталог продуктов</h2>
-          </div>
-          <div className="category-tiles" aria-hidden="true">
-            {Array.from({ length: 8 }, (_, i) => (
-              <span key={i} className="category-tile-skeleton" />
-            ))}
-          </div>
-        </section>
+        <p className="muted">Каталог пока пуст.</p>
       </div>
     );
   }
@@ -350,7 +351,17 @@ export async function Catalog({
   let path: Category[] = [];
   let activeChild: Category | null = null;
 
-  const categories = list<Category>(await publicApi(`stores/${store}/categories`));
+  const needsCategoryTree =
+    (kind === 'catalog' && !id) || kind === 'category';
+  const needsSearchCategories =
+    kind === 'search' && (typeof params.query !== 'string' || params.query.trim().length < 2);
+  const categories = needsCategoryTree || needsSearchCategories
+    ? list<HomeCategory>(
+        await publicApi(
+          `stores/${store}/categories${needsCategoryTree ? '?includeChildren=true&perPage=100' : ''}`,
+        ),
+      )
+    : [];
 
   if (kind === 'catalog' && !id) {
     return (
@@ -388,25 +399,13 @@ export async function Catalog({
       api(`search/stores/${store}/filters?${q}`),
     ]);
   } else if (kind === 'collection') {
-    const groups = list<ProductGroupDto>(await api(`stores/${store}/product-groups`));
-    const groupItem = groups.find((g) => g.slug === id || String(g.id) === id);
-    if (!groupItem) {
-      throw new ApiError(404, { message: 'Подборка не найдена' });
-    }
-    title = groupItem.title;
     data = await api(
-      `stores/${store}/product-groups/slug/${encodeURIComponent(groupItem.slug)}/products?${q}`,
+      `stores/${store}/product-groups/slug/${encodeURIComponent(id || '')}/products?${q}`,
     );
+    title = data.group?.title || title;
   } else {
     // Category page
-    if (id && !/^\d+$/.test(id)) {
-      const detail = unwrap<Category>(
-        await publicApi(`stores/${store}/categories/slug/${encodeURIComponent(id)}`),
-      );
-      path = [...(detail.ancestors || []), detail];
-    } else {
-      path = (await findCategoryPath(store, categories, id || '')) || [];
-    }
+    path = findCategoryPathInTree(categories, id || '') || [];
 
     const current = path.at(-1);
     if (!current) {
@@ -414,21 +413,21 @@ export async function Catalog({
     }
 
     title = current.name;
-    children = list<Category>(await publicApi(`stores/${store}/categories/${current.id}/children`));
+    children = (current as HomeCategory).children || [];
 
     // Resolve active subcategory if subcategories exist:
     if (children.length > 0) {
       const subParam = typeof params.sub === 'string' ? params.sub : undefined;
-      activeChild =
-        children.find((c) => c.slug === subParam || String(c.id) === subParam) ||
-        children[0];
+      activeChild = subParam
+        ? children.find((c) => c.slug === subParam || String(c.id) === subParam) || null
+        : null;
     }
 
     // Always fetch products! If subcategory is active, fetch its products; otherwise current category
     const targetCategoryId = activeChild ? activeChild.id : current.id;
 
     [data, filters] = await Promise.all([
-      publicApi(`stores/${store}/categories/${targetCategoryId}/products?${q}`),
+      api(`stores/${store}/categories/${targetCategoryId}/products?${q}`),
       publicApi(`stores/${store}/categories/${targetCategoryId}/filters`),
     ]);
   }
@@ -437,10 +436,7 @@ export async function Catalog({
   const page = Math.max(1, Number(params.page) || 1);
 
   function pageLink(n: number) {
-    const p = new URLSearchParams(q);
-    p.set('page', String(n));
-    p.delete('perPage');
-    return '?' + p.toString();
+    return catalogPageHref(q, n, typeof params.sub === 'string' ? params.sub : undefined);
   }
 
   const currentCategory = path.at(-1);
@@ -481,6 +477,12 @@ export async function Catalog({
       {children.length > 0 && currentCategory && (
         <div className="subcategory-pills-bar">
           <div className="subcategory-pills-scroll">
+            <Link
+              href={`/category/${currentCategory.slug}`}
+              className={`subcategory-pill ${!activeChild ? 'active' : ''}`}
+            >
+              Все
+            </Link>
             {children.map((child) => {
               const isActive =
                 activeChild && (activeChild.id === child.id || activeChild.slug === child.slug);
@@ -508,6 +510,12 @@ export async function Catalog({
                 <h4>Подразделы</h4>
               </div>
               <nav className="sidebar-subcategories-list">
+                <Link
+                  href={`/category/${currentCategory.slug}`}
+                  className={`sidebar-subcategory-link ${!activeChild ? 'active' : ''}`}
+                >
+                  <span>Все товары</span>
+                </Link>
                 {children.map((child) => {
                   const isActive =
                     activeChild && (activeChild.id === child.id || activeChild.slug === child.slug);
@@ -556,7 +564,7 @@ export async function Catalog({
 export async function ProductPage({ id }: { id: string }) {
   const store = await selectedStore();
   const [detailData, similar, relatedGroups] = await Promise.all([
-    publicApi(`products/${encodeURIComponent(id)}?storeId=${store}`),
+    api(`products/${encodeURIComponent(id)}?storeId=${store}`),
     publicApi(`products/${id}/similar?storeId=${store}&perPage=6`).then(list).catch(() => []),
     publicApi(`products/${id}/related?storeId=${store}&perPage=6`).then(list).catch(() => []),
   ]);

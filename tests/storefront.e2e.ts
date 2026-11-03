@@ -99,9 +99,9 @@ test('key storefront pages do not overflow or sit behind fixed controls at refer
   }
 });
 
-test('anonymous personal pages request login instead of exposing data',async({page})=>{
+test('anonymous cart remains accessible and personal pages request login',async({page})=>{
   await page.goto('/cart');
-  await expect(page.getByRole('button',{name:'Войти по телефону'})).toBeVisible();
+  await expect(page.getByText('В корзине пока пусто')).toBeVisible();
   await page.goto('/favorites');
   await expect(page.getByRole('button',{name:'Войти по телефону'})).toBeVisible();
 });
