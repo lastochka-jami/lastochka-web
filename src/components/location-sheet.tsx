@@ -33,6 +33,35 @@ export const LOCATION_OPEN_EVENT = 'lastochka:open-location';
 export const LOCATION_CHANGED_EVENT = 'lastochka:location-changed';
 export const LOCATION_MODE_STORAGE_KEY = 'lastochka:location-mode';
 
+function isSelectableStore(store: Store) {
+  return (
+    store.id !== 8 &&
+    store.name.trim().toLowerCase() !== 'default' &&
+    store.isActive !== false
+  );
+}
+
+export async function activateDeliveryAddressForStore(
+  addressId: number,
+  currentStoreId: number,
+  label?: string,
+) {
+  const availableStores = list<Store>(
+    await request(`stores?addressId=${addressId}&perPage=100`),
+  ).filter(isSelectableStore);
+  const store =
+    availableStores.find((candidate) => candidate.id === currentStoreId) ?? availableStores[0];
+  if (!store) throw new Error('Для этого адреса нет доступных магазинов доставки');
+
+  const result = await request<any>('/api/store', 'POST', { storeId: store.id, addressId });
+  if (Number(result?.store?.id) !== store.id) {
+    throw new Error('Сервер выбрал другой магазин. Попробуйте ещё раз.');
+  }
+  await request(`addresses/${addressId}/active`, 'PUT');
+  announceLocation({ mode: 'delivery', label });
+  return result;
+}
+
 interface LocationTriggerProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   children: ReactNode;
   initialTab?: LocationMode;
@@ -197,9 +226,11 @@ export function LocationSheet({
     setError(null);
     try {
       const beforeCart = s.cart;
-      await request(`addresses/${addressId}/active`, 'PUT');
-      const afterCart = unwrap(await request('cart').catch(() => null));
+      const result = await activateDeliveryAddressForStore(addressId, s.storeId);
+      const afterCart = unwrap(result.cart ?? (await request('cart').catch(() => null)));
       await s.refresh();
+      const refreshedAddresses = list<Address>(await request('addresses').catch(() => []));
+      setAddresses(refreshedAddresses);
       const selectedAddress = addresses.find((address) => address.id === addressId);
       const addressLabel = selectedAddress
         ? [selectedAddress.city, selectedAddress.street, selectedAddress.houseNumber && `д. ${selectedAddress.houseNumber}`]
