@@ -15,14 +15,14 @@ import {
 } from '@/lib/types';
 import { content } from '@/config/content';
 import { Photo, Empty } from '@/components/ui';
-import { ProductGrid, ProductDetail, ProductCarousel, SkeletonCards } from '@/components/products';
+import { ProductGrid, ProductDetail, ProductCarousel } from '@/components/products';
 import { Filters } from '@/components/filters';
 import { LoyaltyCard } from './account/bonuses/loyalty-card';
 import { Reviews } from './account/reviews/reviews-view';
 import { InteractiveCategorySection } from '@/components/interactive-category-section';
 import { CategoryFallback } from '@/components/category-fallback';
 import { LocationTrigger } from '@/components/location-sheet';
-import { bannerHref, catalogPageHref } from '@/lib/storefront-links';
+import { bannerHref, catalogPageHref, visibleBanners } from '@/lib/storefront-links';
 
 export { getCategoryGroupColor };
 
@@ -57,30 +57,125 @@ export function SectionHeading({
   );
 }
 
+async function HomeStories() {
+  const stories = await publicApi('stories').then(list<StorefrontStoryDto>).catch(() => []);
+  if (!stories.length) return null;
+  return (
+    <div className="stories">
+      {stories.map((story) => (
+        <Link href={'/stories/' + story.id} key={story.id}>
+          <Photo
+            src={story.thumbnailImage?.path || story.images?.[0]?.path}
+            alt={story.title}
+            width={82}
+            height={82}
+            sizes="82px"
+          />
+          <span>{story.title}</span>
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+async function HomeBanners({ store }: { store: number }) {
+  const banners = await publicApi(`stores/${store}/banners`)
+    .then(list<BannerDto>)
+    .then((items) => visibleBanners(items, async (id) => {
+      try {
+        await publicApi(`products/${id}?storeId=${store}`);
+        return true;
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404) return false;
+        throw error;
+      }
+    }))
+    .catch(() => []);
+  if (!banners.length) return null;
+  return (
+    <section className="home-banners-section" aria-label="Акции магазина">
+      <div className="home-banners">
+        {banners.map((banner, index) => {
+          const href = bannerHref(banner);
+          const tile = (
+            <>
+              <Photo
+                src={banner.image?.path}
+                alt={banner.title}
+                sizes="(max-width: 767px) calc(100vw - 28px), (max-width: 1399px) calc((100vw - 64px) / 2), 648px"
+                eager={index === 0}
+              />
+              <strong>{banner.title}</strong>
+            </>
+          );
+          return href ? (
+            <Link href={href} className="home-banner" key={banner.id}>
+              {tile}
+            </Link>
+          ) : (
+            <div className="home-banner" key={banner.id}>{tile}</div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+async function HomeCategories({ categories }: { categories: Promise<HomeCategory[]> }) {
+  const roots = await categories;
+  const children = roots.slice(0, 4).flatMap((category) => (category.children || []).slice(0, 2));
+  const showcase = children.length >= 3 ? children.slice(0, 6) : roots.slice(0, 6);
+  return (
+    <section className="home-showcase-section">
+      {showcase.length ? (
+        <>
+          <SectionHeading title="Популярные категории" href="/catalog" />
+          <CategoryTiles categories={showcase} />
+        </>
+      ) : <p className="muted">Категории пока не добавлены.</p>}
+    </section>
+  );
+}
+
+async function HomeCollections({ groups }: { groups: Promise<ProductGroupDto[]> }) {
+  const recommended = (await groups).filter((group) => group.is_recommended);
+  if (!recommended.length) return null;
+  return (
+    <section className="home-collections-section">
+      <SectionHeading title={content.home.titles.collections} />
+      <div className="collections">
+        {recommended.map((group, index) => (
+          <Link key={group.id} href={'/collection/' + group.slug} className={`collection-tile tone-${index % 5}`}>
+            <Photo src={group.image?.path} alt="" sizes="(max-width: 767px) calc((100vw - 38px) / 2), (max-width: 1023px) calc((100vw - 68px) / 3), 220px" />
+            <strong>{group.title}</strong>
+            <span className="tile-arrow"><ArrowRight size={18} /></span>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+async function HomeFeatured({ store, groups }: { store: number; groups: Promise<ProductGroupDto[]> }) {
+  const allGroups = await groups;
+  const featured = allGroups.find((group) => group.slug === 'firmennye-bliuda') ||
+    allGroups.find((group) => !group.is_recommended && (group.productsCount || 0) > 0);
+  if (!featured) return null;
+  const products = await publicApi(`product-groups/${featured.id}/products?storeId=${store}&perPage=8`)
+    .then(list<Product>).then((items) => items.map(product)).catch(() => []);
+  if (!products.length) return null;
+  return (
+    <section>
+      <SectionHeading title={featured.title} href={'/collection/' + featured.slug} subtitle="Приготовлено с заботой" />
+      <ProductCarousel products={products} />
+    </section>
+  );
+}
+
 export async function Home() {
-  const id = await selectedStore();
-  const [groups, categories, banners, stories] = await Promise.all([
-    publicApi(`stores/${id}/product-groups`).then(list<ProductGroupDto>),
-    publicApi(`stores/${id}/categories?includeChildren=true&perPage=100`).then(list<HomeCategory>),
-    publicApi(`stores/${id}/banners`).then(list<BannerDto>),
-    publicApi('stories').then(list<StorefrontStoryDto>),
-  ]);
-
-  const recommended = groups.filter((g) => g.is_recommended);
-  const featured =
-    groups.find((g) => g.slug === 'firmennye-bliuda') ||
-    groups.find((g) => !g.is_recommended && (g.productsCount || 0) > 0);
-
-  const featuredProducts = featured
-    ? list<Product>(await publicApi(`product-groups/${featured.id}/products?storeId=${id}&perPage=8`)).map(product)
-    : [];
-
-  // Extract showcase tiles with real images
-  const showcaseSubcategories = categories
-    .slice(0, 4)
-    .flatMap((c) => (c.children || []).slice(0, 2));
-  const showcase =
-    showcaseSubcategories.length >= 3 ? showcaseSubcategories.slice(0, 6) : categories.slice(0, 6);
+  const store = await selectedStore();
+  const groups = publicApi(`stores/${store}/product-groups`).then(list<ProductGroupDto>).catch(() => []);
+  const categories = publicApi(`stores/${store}/categories?includeChildren=true&perPage=100`).then(list<HomeCategory>).catch(() => []);
 
   return (
     <>
@@ -88,116 +183,35 @@ export async function Home() {
         <div className="welcome-text">
           <p className="eyebrow">{content.brand}</p>
           <h1>{content.tagline}</h1>
-          <p>
-            Продукты для любимых блюд.
-            <br className="mobile-break" /> И маленьких повседневных радостей.
-          </p>
+          <p>Продукты для любимых блюд.<br className="mobile-break" /> И маленьких повседневных радостей.</p>
           <LocationTrigger className="address-cta" initialTab="delivery">
             <MapPin size={18} /> Указать адрес доставки <ChevronRight size={16} />
           </LocationTrigger>
         </div>
         <LoyaltyCard compact />
       </section>
-
       <div className="home-sheet">
-        {stories.length > 0 && (
-          <div className="stories">
-            {stories.map((st) => (
-              <Link href={'/stories/' + st.id} key={st.id}>
-                <Photo
-                  src={st.thumbnailImage?.path || st.images?.[0]?.path}
-                  alt={st.title}
-                />
-                <span>{st.title}</span>
-              </Link>
-            ))}
-          </div>
-        )}
-
-        {banners.length > 0 && (
-          <section className="home-banners-section" aria-label="Акции магазина">
-            <div className="collections home-banners">
-              {banners.map((banner) => {
-                const href = bannerHref(banner);
-                const content = (
-                  <>
-                    <Photo src={banner.image?.path} alt={banner.title} />
-                    <strong>{banner.title}</strong>
-                  </>
-                );
-                return href ? (
-                  <Link href={href} className="collection-tile home-banner" key={banner.id}>
-                    {content}
-                  </Link>
-                ) : (
-                  <div className="collection-tile home-banner" key={banner.id}>
-                    {content}
-                  </div>
-                );
-              })}
+        <Suspense fallback={null}><HomeStories /></Suspense>
+        <Suspense fallback={null}><HomeBanners store={store} /></Suspense>
+        <Suspense fallback={
+          <section className="home-showcase-section category-loading" aria-busy="true">
+            <SectionHeading title="Популярные категории" href="/catalog" />
+            <div className="category-tiles" aria-hidden="true">
+              {Array.from({ length: 6 }, (_, index) => <span className="category-tile" key={index} />)}
             </div>
           </section>
-        )}
-
-        <section className="home-showcase-section">
-          {showcase.length > 0 ? (
-            <>
-              <SectionHeading title="Популярные категории" href="/catalog" />
-              <CategoryTiles categories={showcase} />
-            </>
-          ) : (
-            <p className="muted">Категории пока не добавлены.</p>
-          )}
-        </section>
-
-        {/* Featured promo collections on Home */}
-        {recommended.length > 0 && (
-          <section className="home-collections-section">
-            <SectionHeading title={content.home.titles.collections} />
-            <div className="collections">
-              {recommended.map((g, i) => (
-                <Link
-                  key={g.id}
-                  href={'/collection/' + g.slug}
-                  className={`collection-tile tone-${i % 5}`}
-                >
-                  <Photo src={g.image?.path} alt="" />
-                  <strong>{g.title}</strong>
-                  <span className="tile-arrow">
-                    <ArrowRight size={18} />
-                  </span>
-                </Link>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {featured && featuredProducts.length > 0 && (
-          <section>
-            <SectionHeading
-              title={featured?.title || 'Хиты продаж'}
-              href={'/collection/' + featured?.slug}
-              subtitle="Приготовлено с заботой"
-            />
-            <ProductCarousel products={featuredProducts} />
-          </section>
-        )}
-
-        {/* Compact catalog navigation hint */}
+        }>
+          <HomeCategories categories={categories} />
+        </Suspense>
+        <Suspense fallback={null}><HomeCollections groups={groups} /></Suspense>
+        <Suspense fallback={null}><HomeFeatured store={store} groups={groups} /></Suspense>
         <section className="catalog-hint-section">
           <div className="catalog-hint-card">
             <div className="catalog-hint-info">
-              <div className="catalog-hint-badge">
-                <LayoutGrid size={24} />
-              </div>
-              <div>
-                <h3>Каталог всех товаров</h3>
-                <p>Готовая кулинария, свежая выпечка, фермерские продукты и напитки</p>
-              </div>
+              <div className="catalog-hint-badge"><LayoutGrid size={24} /></div>
+              <div><h3>Каталог всех товаров</h3><p>Готовая кулинария, свежая выпечка, фермерские продукты и напитки</p></div>
             </div>
-            <Link href="/catalog" className="catalog-hint-button">
-              Открыть каталог <ArrowRight size={18} />
-            </Link>
+            <Link href="/catalog" className="catalog-hint-button">Открыть каталог <ArrowRight size={18} /></Link>
           </div>
         </section>
       </div>
@@ -234,6 +248,7 @@ export function CategoryTiles({
                   className="category-tile-image"
                   width={140}
                   height={140}
+                  sizes="(max-width: 767px) calc((100vw - 44px) * 0.1933), (max-width: 1023px) calc((100vw - 70px) * 0.145), (max-width: 1399px) calc((100vw - 124px) * 0.0967), 126px"
                 />
               </div>
             ) : (

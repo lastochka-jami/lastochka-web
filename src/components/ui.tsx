@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState, ReactNode } from 'react';
 import Image from 'next/image';
 import { X, ImageIcon, LoaderCircle } from 'lucide-react';
+import { imageCandidates } from '@/lib/storefront-media';
 
 export interface PhotoProps {
   src?: string | null;
@@ -27,22 +28,29 @@ export function Photo({
   sizes,
   fill,
 }: PhotoProps) {
-  const candidates = [src, ...(sources || [])].filter(
-    (value, index, all): value is string => !!value && all.indexOf(value) === index,
-  );
+  const candidates = imageCandidates(src, sources);
+  // A new source list gets fresh error state during render, including before effects run.
+  return <PhotoContent key={JSON.stringify(candidates)} candidates={candidates} alt={alt} className={className} eager={eager} width={width} height={height} sizes={sizes} fill={fill} />;
+}
+
+function PhotoContent({ candidates, alt = '', className = '', eager, width, height, sizes, fill }: Omit<PhotoProps, 'src' | 'sources'> & { candidates: string[] }) {
   const [candidateIndex, setCandidateIndex] = useState(0);
   const [hasError, setHasError] = useState(false);
-
-  useEffect(() => {
-    setCandidateIndex(0);
-    setHasError(false);
-  }, [src, sources?.join('|')]);
-
   const current = candidates[candidateIndex];
 
   if (!current || hasError) {
     return (
-      <div className={`photo-placeholder ${className}`} role="img" aria-label={alt || 'Фото пока нет'}>
+      <div
+        className={`photo-placeholder ${className}`}
+        role="img"
+        aria-label={alt || 'Фото пока нет'}
+        style={{
+          aspectRatio: `${width || 500} / ${height || 500}`,
+          minHeight: 0,
+          ...(fill ? { position: 'absolute', inset: 0 } : {}),
+          ...(width && height && sizes === `${width}px` ? { width, height, maxWidth: '100%' } : {}),
+        }}
+      >
         <ImageIcon size={30} strokeWidth={1.5} />
         <span>Фото скоро</span>
       </div>
@@ -63,12 +71,13 @@ export function Photo({
 
   return (
     <Image
+      key={current}
       src={current}
       alt={alt}
       className={className}
       loading={eager ? 'eager' : 'lazy'}
-      priority={eager}
-      sizes={sizes || '(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw'}
+      fetchPriority={eager ? 'high' : undefined}
+      sizes={sizes && !eager ? `auto, ${sizes}` : sizes}
       fill={isFill}
       width={!isFill ? width || 500 : undefined}
       height={!isFill ? height || 500 : undefined}
@@ -95,7 +104,7 @@ export function Modal({
     const el = ref.current;
     const previousActiveElement = document.activeElement as HTMLElement | null;
     el?.showModal();
-    requestAnimationFrame(() => el?.querySelector<HTMLElement>('[data-modal-close]')?.focus());
+    requestAnimationFrame(() => (el?.querySelector<HTMLElement>('[data-modal-initial-focus]') || el?.querySelector<HTMLElement>('[data-modal-close]'))?.focus());
     const oldOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
 
@@ -132,11 +141,11 @@ export function Modal({
   );
 }
 
-export function Empty({ title, children }: { title: string; children?: ReactNode }) {
+export function Empty({ title, children, headingLevel = 2 }: { title: string; children?: ReactNode; headingLevel?: 1 | 2 }) {
   return (
     <div className="empty">
       <img src="/images/swallow.webp" alt="" width={72} height={72} />
-      <h2>{title}</h2>
+      {headingLevel === 1 ? <h1>{title}</h1> : <h2>{title}</h2>}
       {children}
     </div>
   );

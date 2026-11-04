@@ -473,6 +473,21 @@ export function cartItems(cart: Cart | null | undefined): CartItem[] {
   return [];
 }
 
+export function cartGroupTotals(group: CartStoreGroup, pickup = false, bonusSpend = 0) {
+  const round = (amount: number) => Math.round(amount * 100) / 100;
+  const items = round(group.items.reduce((sum, item) => sum + itemAmount(item), 0));
+  const delivery = pickup ? 0 : group.deliveryCost ?? 0;
+  const assembly = group.assemblyCost ?? 0;
+  const discount = group.discount ?? 0;
+  return { items, delivery, assembly, discount, total: round(Math.max(0, items + delivery + assembly - discount - bonusSpend)) };
+}
+
+export function cartTotal(cart: Cart | null | undefined, pickup = false): number {
+  return Math.round((cart?.storeGroups
+    ? cart.storeGroups.reduce((sum, group) => sum + cartGroupTotals(group, pickup).total, 0)
+    : cartItems(cart).reduce((sum, item) => sum + itemAmount(item), 0)) * 100) / 100;
+}
+
 export function cartChange(before: Cart | null | undefined, after: Cart | null | undefined): string | null {
   const oldItems = new Map(cartItems(before).map((item) => [item.id, item]));
   const newItems = new Map(cartItems(after).map((item) => [item.id, item]));

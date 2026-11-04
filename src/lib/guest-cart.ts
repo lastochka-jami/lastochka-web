@@ -1,4 +1,4 @@
-import { Product, Cart, CartItem, step, itemAmount, CartStoreGroup } from './types';
+import { Product, Cart, CartItem, step, itemAmount, CartStoreGroup, Store } from './types';
 import { request } from './client';
 
 const GUEST_CART_STORAGE_KEY = 'lastochka_guest_cart_v1';
@@ -44,6 +44,7 @@ function recalculateCartTotals(storeGroups: CartStoreGroup[]): Cart {
       const itemTotal = itemAmount(item);
       groupTotal += itemTotal;
     }
+    groupTotal = Math.round(groupTotal * 100) / 100;
     group.total = groupTotal;
     group.totalToPay = groupTotal;
     grandTotal += groupTotal;
@@ -51,12 +52,22 @@ function recalculateCartTotals(storeGroups: CartStoreGroup[]): Cart {
 
   return {
     storeGroups: storeGroups.filter((g) => g.items.length > 0),
-    total: grandTotal,
-    totalToPay: grandTotal,
+    total: Math.round(grandTotal * 100) / 100,
+    totalToPay: Math.round(grandTotal * 100) / 100,
   };
 }
 
-export function addGuestCartItem(p: Product, supplements?: unknown[], quantity = step(p)): Cart {
+export function syncGuestCartStores(stores: Store[]): Cart {
+  const cart = getGuestCart();
+  for (const group of cart.storeGroups || []) {
+    // Persist only capabilities returned by the store API, including explicit false.
+    group.store = stores.find(store => store.id === group.store.id) || { id: group.store.id, name: `Магазин №${group.store.id}` };
+  }
+  saveGuestCart(cart);
+  return cart;
+}
+
+export function addGuestCartItem(p: Product, supplements?: unknown[], quantity = step(p), store?: Store): Cart {
   if (!Number.isSafeInteger(quantity) || quantity <= 0 || quantity > 99999 || quantity % step(p)) throw new Error("Некорректное количество товара");
   const current = getGuestCart();
   const groups: CartStoreGroup[] = current.storeGroups ? [...current.storeGroups] : [];
@@ -67,15 +78,12 @@ export function addGuestCartItem(p: Product, supplements?: unknown[], quantity =
 
   if (!targetGroup) {
     targetGroup = {
-      store: {
-        id: storeId,
-        name: 'Магазин доставки',
-        isPickupEnabled: true,
-      },
+      store: store?.id === storeId ? { ...store } : { id: storeId, name: `Магазин №${storeId}` },
       items: [],
     };
     groups.push(targetGroup);
   }
+  if (store?.id === storeId) targetGroup.store = { ...store };
 
   const existingItemIndex = targetGroup.items.findIndex(
     (item) =>

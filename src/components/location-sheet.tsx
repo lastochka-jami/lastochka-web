@@ -14,6 +14,10 @@ import {
 import { useShop } from './shop-context';
 import { request } from '@/lib/client';
 import { list, unwrap, cartChange, Store, Address } from '@/lib/types';
+import { announceLocation, LOCATION_OPEN_EVENT } from '@/lib/fulfillment';
+import type { LocationMode, LocationSelection } from '@/lib/fulfillment';
+export { LOCATION_OPEN_EVENT, LOCATION_CHANGED_EVENT, LOCATION_MODE_STORAGE_KEY } from '@/lib/fulfillment';
+export type { LocationMode, LocationSelection } from '@/lib/fulfillment';
 
 interface LocationSheetProps {
   isOpen: boolean;
@@ -21,17 +25,6 @@ interface LocationSheetProps {
   currentStore?: Store | null;
   initialTab?: 'delivery' | 'pickup';
 }
-
-export type LocationMode = 'delivery' | 'pickup';
-
-export interface LocationSelection {
-  mode: LocationMode;
-  label?: string;
-}
-
-export const LOCATION_OPEN_EVENT = 'lastochka:open-location';
-export const LOCATION_CHANGED_EVENT = 'lastochka:location-changed';
-export const LOCATION_MODE_STORAGE_KEY = 'lastochka:location-mode';
 
 function isSelectableStore(store: Store) {
   return (
@@ -58,7 +51,7 @@ export async function activateDeliveryAddressForStore(
     throw new Error('Сервер выбрал другой магазин. Попробуйте ещё раз.');
   }
   await request(`addresses/${addressId}/active`, 'PUT');
-  announceLocation({ mode: 'delivery', label });
+  announceLocation({ mode: 'delivery', label, storeId: store.id, addressId });
   return result;
 }
 
@@ -88,13 +81,6 @@ export function LocationTrigger({
     >
       {children}
     </button>
-  );
-}
-
-function announceLocation(selection: LocationSelection) {
-  window.localStorage.setItem(LOCATION_MODE_STORAGE_KEY, selection.mode);
-  window.dispatchEvent(
-    new CustomEvent<LocationSelection>(LOCATION_CHANGED_EVENT, { detail: selection }),
   );
 }
 
@@ -205,12 +191,13 @@ export function LocationSheet({
       if (Number(result?.store?.id) !== storeId) {
         throw new Error('Сервер выбрал другой магазин. Попробуйте ещё раз.');
       }
-      await s.refresh();
-      s.notice(cartChange(beforeCart, result.cart) || `Самовывоз: ${result.store.name}`);
       announceLocation({
         mode: 'pickup',
         label: result.store.address || result.store.name,
+        storeId,
       });
+      await s.refresh();
+      s.notice(cartChange(beforeCart, result.cart) || `Самовывоз: ${result.store.name}`);
       router.refresh();
       onClose();
     } catch (err: any) {
@@ -237,7 +224,7 @@ export function LocationSheet({
             .filter(Boolean)
             .join(', ')
         : undefined;
-      announceLocation({ mode: 'delivery', label: addressLabel });
+      announceLocation({ mode: 'delivery', label: addressLabel, storeId: result.store.id, addressId });
       s.notice(
         cartChange(beforeCart, afterCart) || 'Адрес доставки выбран. Каталог обновлён.',
       );

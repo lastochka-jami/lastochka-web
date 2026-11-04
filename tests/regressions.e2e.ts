@@ -4,8 +4,9 @@ const item = {id:-10,quantity:200,price:47.8,product:{id:10,storeId:2,title:'П�
 const cart = {storeGroups:[{store:{id:2,name:'Тестовый магазин',isPickupEnabled:true},items:[item]}]};
 
 test('filled guest cart can be viewed and edited at 320, 390, 768 and 1440 without overflow', async ({page}) => {
+  test.setTimeout(120_000);
   await page.addInitScript(value => localStorage.setItem('lastochka_guest_cart_v1', JSON.stringify(value)),cart);
-  for (const width of [320,390,768,1440]) {
+  for (const width of [320,390,464,767,768,769,1024,1280,1440,1920]) {
     await page.setViewportSize({width,height:900});
     await page.goto('/cart');
     const row = page.locator('.cart-item-row');
@@ -17,24 +18,39 @@ test('filled guest cart can be viewed and edited at 320, 390, 768 and 1440 witho
     expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
     await expect(page.locator('.float-actions')).toBeHidden();
     await expect(page.locator('.cart-main-cta-btn:visible')).toBeDisabled();
+    const geometry = await row.evaluate(el => {
+      const selectors=['.cart-item-thumb','.cart-item-middle','.cart-item-right'];
+      const rects=selectors.map(s=>el.querySelector(s)!.getBoundingClientRect());
+      const buttons=[...el.querySelectorAll('button')].map(b=>{const r=b.getBoundingClientRect();const hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return {w:r.width,h:r.height,left:r.left,right:r.right,hit:b===hit||b.contains(hit)}});
+      const overlap=rects.some((a,i)=>rects.slice(i+1).some(b=>Math.min(a.right,b.right)-Math.max(a.left,b.left)>1&&Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>1));
+      return {overlap,buttons,viewport:innerWidth};
+    });
+    expect(geometry.overlap).toBe(false);
+    for(const button of geometry.buttons){expect(button.w).toBeGreaterThanOrEqual(44);expect(button.h).toBeGreaterThanOrEqual(44);expect(button.left).toBeGreaterThanOrEqual(0);expect(button.right).toBeLessThanOrEqual(geometry.viewport);expect(button.hit).toBe(true);}
+
     await page.screenshot({path:`test-results/cart-${width}.png`,fullPage:true});
   }
 });
 
 test('mobile product actions remain clickable after adding a portion', async ({page}) => {
-  for(const width of [320,390,768,1440]) {
+  test.setTimeout(120_000);
+  for(const width of [320,390,464,767,768,769,1024,1280,1440,1920]) {
     await page.setViewportSize({width,height:900});
     await page.goto('/product/10');
+    await page.evaluate(() => localStorage.removeItem('lastochka_guest_cart_v1'));
+    await page.reload();
     await expect(page.locator('.product-detail h1:visible')).toBeVisible();
     const add = page.locator('.mobile-product-buy-bar .add-button:visible, .detail-buy .add-button:visible').first();
-    if(await add.count()) await add.click();
-    const plus = page.locator('.mobile-product-buy-bar .counter:visible button').last();
-    if(await plus.count()) {
-      await plus.click(); await expect(plus).toBeEnabled();
-      await expect(page.locator('.float-actions')).toBeHidden();
-      const box=await page.locator('.mobile-product-buy-bar .counter:visible').boundingBox();
-      expect(box!.height).toBeLessThanOrEqual(64);
-    }
+    await expect(add).toBeVisible();
+    await add.click();
+    const counter = page.locator('.mobile-product-buy-bar .counter:visible, .detail-buy .counter:visible').first();
+    const plus = counter.getByRole('button').last();
+    await expect(plus).toBeVisible();
+    await plus.click();
+    await expect(plus).toBeEnabled();
+    await expect(page.locator('.float-actions')).toBeHidden();
+    const box = await counter.boundingBox();
+    expect(box!.height).toBeLessThanOrEqual(64);
     expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
     await page.screenshot({path:`test-results/product-${width}.png`,fullPage:true});
   }
@@ -125,9 +141,10 @@ test('an empty server cart still offers retry for retained guest items', async (
 });
 
 test('home, catalog and search fit all required widths with controlled API data', async ({page}) => {
+  test.setTimeout(120_000);
   const errors:string[]=[];
   page.on('pageerror', e=>errors.push(e.message));
-  for (const width of [320,390,768,1440]) {
+  for (const width of [320,390,464,767,768,769,1024,1280,1440,1920]) {
     await page.setViewportSize({width,height:900});
     for (const path of ['/','/catalog','/search?query=салат']) {
       await page.goto(path,{waitUntil:'networkidle'});

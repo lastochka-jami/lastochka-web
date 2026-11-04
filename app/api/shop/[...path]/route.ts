@@ -10,6 +10,7 @@ import {
 } from '@/lib/session';
 import { validMutation } from '@/lib/guard';
 import { upstream, ApiError } from '@/lib/upstream';
+import { normalizePhone } from '@/lib/phone-auth';
 
 const responseHeaders = { 'Cache-Control': 'no-store, private' };
 
@@ -60,6 +61,15 @@ async function handle(req: Request, ctx: { params: Promise<{ path: string[] }> }
     }
 
     if (path.startsWith('auth/phone-')) {
+      try {
+        if (!body || typeof body.phone !== 'string') throw new Error('Введите номер телефона');
+        body.phone = normalizePhone(body.phone);
+        if (path === 'auth/phone-confirm' && (typeof body.code !== 'string' || !/^\d{4,8}$/.test(body.code))) {
+          throw new Error('Введите код подтверждения из SMS');
+        }
+      } catch (error) {
+        return NextResponse.json({ message: error instanceof Error ? error.message : 'Некорректный номер телефона' }, { status: 422, headers: responseHeaders });
+      }
       const sessionAllowed = await rateLimit('otp-session:' + currentSession!.id, 15);
       const phoneAllowed = await rateLimit('otp-phone:' + String(body?.phone), 10);
       if (!sessionAllowed || !phoneAllowed) {

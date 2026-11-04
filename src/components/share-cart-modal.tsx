@@ -23,7 +23,7 @@ export function ShareCartModal({ isOpen, onClose, items }: ShareCartModalProps) 
 
     let pairs: string;
     try { pairs = encodeSharedCart(items); }
-    catch (e) { s.notice((e as Error).message); return; }
+    catch (e) { s.reportError((e as Error).message); return; }
     const origin =
       typeof window !== 'undefined'
         ? window.location.origin
@@ -66,7 +66,7 @@ export function ShareCartModal({ isOpen, onClose, items }: ShareCartModalProps) 
       s.notice('Ссылка на корзину скопирована');
       setTimeout(() => setCopied(false), 3000);
     } catch {
-      s.notice('Не удалось скопировать ссылку');
+      s.reportError('Не удалось скопировать ссылку');
     }
   }
 

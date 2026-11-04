@@ -28,17 +28,17 @@ import { request } from '@/lib/client';
 import { useShop } from './shop-context';
 import { Photo, Modal, ErrorMessage } from './ui';
 
-export function ProductGrid({ products }: { products: Product[] }) {
+export function ProductGrid({ products, imageSizes }: { products: Product[]; imageSizes?: string }) {
   return (
     <div className="product-grid">
       {products.map((p) => (
-        <ProductCard key={p.id} p={p} />
+        <ProductCard key={p.id} p={p} imageSizes={imageSizes} />
       ))}
     </div>
   );
 }
 
-export function ProductCard({ p }: { p: Product }) {
+export function ProductCard({ p, imageSizes = '(max-width: 767px) calc((100vw - 76px) / 2), (max-width: 1023px) calc((100vw - 150px) / 3), (max-width: 1399px) calc((100vw - 166px) / 3), 295px' }: { p: Product; imageSizes?: string }) {
   const [quick, setQuick] = useState(false);
 
   const weightOrUnit =
@@ -52,7 +52,7 @@ export function ProductCard({ p }: { p: Product }) {
     <article className="product-card">
       <div className="product-photo">
         <Link href={'/product/' + p.id}>
-          <Photo src={p.preview || undefined} alt={p.title} sizes="(max-width: 560px) 46vw, (max-width: 1024px) 24vw, 220px" />
+          <Photo src={p.preview || undefined} alt={p.title} sizes={imageSizes} />
         </Link>
         {availabilityText && (
           <span className="availability-badge">
@@ -252,7 +252,7 @@ export function ProductCarousel({
       <div className="product-carousel-track" ref={trackRef}>
         {products.map((p) => (
           <div className="product-carousel-item" key={p.id}>
-            <ProductCard p={p} />
+            <ProductCard p={p} imageSizes="(max-width: 767px) calc((100vw - 84px) / 2), (max-width: 1023px) calc((100vw - 150px) / 3), (max-width: 1399px) calc((100vw - 212px) / 4), 295px" />
           </div>
         ))}
       </div>
@@ -488,7 +488,12 @@ export function ProductDetail({ p: initial, stickyBuy = false }: { p: Product; s
   return (
     <div className={`product-detail ${stickyBuy ? 'has-mobile-buy-bar' : ''}`}>
       <div className="gallery">
-        <Photo src={p.images?.[imageIndex]?.path} alt={p.title} />
+        <Photo
+          src={p.images?.[imageIndex]?.path}
+          alt={p.title}
+          sizes="(max-width: 767px) calc(100vw - 28px), (max-width: 1023px) calc((100vw - 72px) * 0.45), (max-width: 1399px) calc((100vw - 138px) * 0.55), 699px"
+          eager={stickyBuy && imageIndex === 0}
+        />
         {p.images?.length > 1 && (
           <div className="thumbnails">
             {p.images.map((im, i) => (
@@ -499,7 +504,7 @@ export function ProductDetail({ p: initial, stickyBuy = false }: { p: Product; s
                 aria-pressed={i === imageIndex}
                 type="button"
               >
-                <Photo src={im.path} alt="" width={60} height={60} />
+                <Photo src={im.path} alt="" width={72} height={72} sizes="72px" />
               </button>
             ))}
           </div>
@@ -528,7 +533,7 @@ export function ProductDetail({ p: initial, stickyBuy = false }: { p: Product; s
           </button>
         </div>
         {p.category && (
-          <Link className="eyebrow" href={'/category/' + p.category.slug || String(p.category.id)}>
+          <Link className="eyebrow" href={'/category/' + (p.category.slug || p.category.id)}>
             {p.category.name}
           </Link>
         )}

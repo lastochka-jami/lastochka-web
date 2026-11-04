@@ -113,7 +113,7 @@ export function ShareCartView() {
       }, 1000);
     } catch (err: any) {
       console.error('Error importing cart:', err);
-      s.notice(err?.message || 'Не удалось перенести все товары в корзину');
+      s.reportError(err?.message || 'Не удалось перенести все товары в корзину');
       setAdding(false);
     }
   }

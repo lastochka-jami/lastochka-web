@@ -1,5 +1,8 @@
 'use client';
 
+import { normalizePhone, normalizeOtp } from './phone-auth';
+import { unwrap } from './types';
+
 let cachedCsrfToken = '';
 
 export interface BrowserSessionData {
@@ -22,6 +25,17 @@ export async function browserSession(): Promise<BrowserSessionData> {
   if (!response.ok) throw new Error(data?.message || "Не удалось загрузить сессию");
   cachedCsrfToken = data.csrf;
   return data;
+}
+
+export async function requestPhoneCode(input: string): Promise<{ phone: string; codeLength: number }> {
+  const phone = normalizePhone(input);
+  const data = unwrap<{ codeLength?: number }>(await request('auth/phone-login', 'POST', { phone, method: 'sms' }));
+  const length = Number(data?.codeLength);
+  return { phone, codeLength: Number.isSafeInteger(length) && length >= 4 && length <= 8 ? length : 6 };
+}
+
+export async function confirmPhoneCode(phone: string, code: string, length: number): Promise<void> {
+  await request('auth/phone-confirm', 'POST', { phone: normalizePhone(phone), code: normalizeOtp(code, length) });
 }
 
 export async function request<T = any>(

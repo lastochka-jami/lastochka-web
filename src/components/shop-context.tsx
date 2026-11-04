@@ -7,17 +7,20 @@ import {
   useEffect,
   ReactNode,
   useCallback,
+  useRef,
 } from 'react';
 import { useRouter } from 'next/navigation';
-import { request, browserSession } from '@/lib/client';
-import { Product, Cart, unwrap } from '@/lib/types';
+import { request, browserSession, requestPhoneCode, confirmPhoneCode } from '@/lib/client';
+import { Product, Cart, unwrap, Store, list, step } from '@/lib/types';
 import {
   getGuestCart,
   addGuestCartItem,
   setGuestCartQuantity,
   mergeGuestCartToServer,
+  syncGuestCartStores,
 } from '@/lib/guest-cart';
 import { Modal, ErrorMessage } from './ui';
+import { LOCATION_CHANGED_EVENT, readLocation, type LocationMode } from '@/lib/fulfillment';
 
 export interface ShopContextValue {
   authenticated: boolean;
@@ -34,6 +37,8 @@ export interface ShopContextValue {
   checkoutEnabled: boolean;
   publicOrigin: string;
   storeId: number;
+  locationMode: LocationMode;
+  reportError: (message: string) => void;
 }
 
 const Context = createContext<ShopContextValue>(null!);
@@ -47,38 +52,52 @@ export function ShopProvider({ children }: { children: ReactNode }) {
   const [cartError, setCartError] = useState('');
   const [cart, setCart] = useState<Cart | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
+  const notice = (text: string) => setMessage({ text, error: false });
+  const reportError = (text: string) => setMessage({ text, error: true });
+  const [locationMode, setLocationMode] = useState<LocationMode>('delivery');
+  const stores = useRef<Store[]>([]);
+  const refreshVersion = useRef(0);
   const [checkoutEnabled, setCheckout] = useState(false);
   const [publicOrigin, setPublicOrigin] = useState('');
   const [storeId, setStoreId] = useState(2);
 
   const refresh = useCallback(async () => {
+    const version = ++refreshVersion.current;
+    const selection = readLocation();
+    setLocationMode(selection.mode);
     setCartError('');
     try {
       const sessionData = await browserSession();
+      if (version !== refreshVersion.current) return;
       setAuth(sessionData.authenticated);
       setStoreId(sessionData.storeId);
       setCheckout(sessionData.checkoutEnabled);
       setPublicOrigin(sessionData.publicOrigin);
-      setReady(true);
-
       if (sessionData.authenticated) {
-        try {
-          const serverCart = unwrap<Cart>(await request('cart'));
-          setCart(serverCart);
-        } catch (err: any) {
-          setCartError(err.message || 'Не удалось загрузить корзину');
-          if (err?.status === 401) { setAuth(false); setCart(getGuestCart()); setAuthOpen(true); }
-          setMessage((err as Error).message);
-        }
+        const query = new URLSearchParams({ shippingMethod: selection.mode === 'pickup' ? 'pickup' : 'courier' });
+        if (selection.mode === 'delivery' && selection.addressId) query.set('addressId', String(selection.addressId));
+        const serverCart = unwrap<Cart>(await request('cart?' + query));
+        if (version === refreshVersion.current) setCart(serverCart);
       } else {
-        // Load guest cart from local storage
-        setCart(getGuestCart());
+        // Store capabilities and pickup addresses come from the same API as the location picker.
+        stores.current = list<Store>(await request('stores?perPage=100'));
+        if (version === refreshVersion.current) setCart(syncGuestCartStores(stores.current));
       }
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Не удалось загрузить сессию");
-      setReady(true);
-      setCart(getGuestCart());
+    } catch (error: any) {
+      if (version !== refreshVersion.current) return;
+      const text = error instanceof Error ? error.message : 'Не удалось загрузить корзину';
+      setCartError(text);
+      reportError(text);
+      if (error?.status === 401) {
+        setAuth(false);
+        setCart(getGuestCart());
+        setAuthOpen(true);
+      } else {
+        setCart(current => current || getGuestCart());
+      }
+    } finally {
+      if (version === refreshVersion.current) setReady(true);
     }
   }, []);
 
@@ -93,10 +112,16 @@ export function ShopProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   useEffect(() => {
-    if (!message) return;
-    const timer = setTimeout(() => setMessage(''), 6500);
+    if (!message || message.error) return;
+    const timer = setTimeout(() => setMessage(null), 1800);
     return () => clearTimeout(timer);
   }, [message]);
+
+  useEffect(() => {
+    const changed = () => { void refresh(); };
+    window.addEventListener(LOCATION_CHANGED_EVENT, changed);
+    return () => window.removeEventListener(LOCATION_CHANGED_EVENT, changed);
+  }, [refresh]);
 
   async function run<T>(f: () => Promise<T>): Promise<T | undefined> {
     try {
@@ -107,7 +132,7 @@ export function ShopProvider({ children }: { children: ReactNode }) {
         setCart(getGuestCart());
         setAuthOpen(true);
       } else {
-        setMessage(err instanceof Error ? err.message : 'Произошла ошибка');
+        reportError(err instanceof Error ? err.message : 'Произошла ошибка');
       }
       return undefined;
     }
@@ -117,43 +142,39 @@ export function ShopProvider({ children }: { children: ReactNode }) {
     if (!authenticated) {
       // Guest cart addition
       try {
-        const updated = addGuestCartItem({ ...p, storeId: p.storeId || storeId }, supplements);
+        const productStoreId = p.storeId || storeId;
+        if (!stores.current.some(store => store.id === productStoreId)) stores.current = list<Store>(await request('stores?perPage=100'));
+        const store = stores.current.find(store => store.id === productStoreId);
+        if (!store || store.isActive === false) throw new Error('Магазин товара сейчас недоступен');
+        const updated = addGuestCartItem({ ...p, storeId: productStoreId }, supplements, step(p), store);
         setCart(updated);
-        setMessage('Товар добавлен в корзину');
-      } catch (e) { setMessage((e as Error).message); }
+        notice('Товар добавлен в корзину');
+      } catch (e) { reportError((e as Error).message); }
       return;
     }
 
     await run(async () => {
-      const updated = unwrap<Cart>(
-        await request('cart/items', 'POST', {
+      await request('cart/items', 'POST', {
           productId: p.id,
-          quantity: Math.max(1, Number(p.quantityStep) || 1),
-          storeId: p.storeId,
+          quantity: step(p),
+          storeId: p.storeId || storeId,
           supplements,
-        }),
-      );
-      setCart(updated);
-      setMessage('Товар добавлен в корзину');
+        });
+      await refresh();
+      notice('Товар добавлен в корзину');
     });
   }
 
   async function setQuantity(id: number, n: number, p?: Product) {
     if (!authenticated) {
       // Guest cart quantity update
-      try { setCart(setGuestCartQuantity(id, n, p)); } catch (e) { setMessage((e as Error).message); }
+      try { setCart(setGuestCartQuantity(id, n, p)); } catch (e) { reportError((e as Error).message); }
       return;
     }
 
     await run(async () => {
-      const response = unwrap<any>(
-        await request(`cart/items/${id}`, n > 0 ? 'PUT' : 'DELETE', n > 0 ? { quantity: n } : undefined),
-      );
-      if (response?.storeGroups || response?.dateGroups) {
-        setCart(response);
-      } else {
-        setCart(unwrap<Cart>(await request('cart')));
-      }
+      await request(`cart/items/${id}`, n > 0 ? 'PUT' : 'DELETE', n > 0 ? { quantity: n } : undefined);
+      await refresh();
     });
   }
 
@@ -169,11 +190,17 @@ export function ShopProvider({ children }: { children: ReactNode }) {
 
   const handleLoginSuccess = async () => {
     setAuthOpen(false);
-    // Merge guest cart items into authenticated user's cart
-    const result = await mergeGuestCartToServer();
-    if (result.remaining) setMessage(`Перенесено позиций: ${result.accepted}. Не перенесено: ${result.remaining}. Они сохранены на устройстве; повторите перенос в корзине.`);
-    await refresh();
-    router.refresh();
+    setAuth(true);
+    ++refreshVersion.current;
+    try {
+      const result = await mergeGuestCartToServer();
+      if (result.remaining) reportError(`Перенесено позиций: ${result.accepted}. Не перенесено: ${result.remaining}. Они сохранены на устройстве; повторите перенос в корзине.`);
+    } catch (error) {
+      reportError(error instanceof Error ? error.message : 'Не удалось перенести корзину. Товары сохранены на устройстве.');
+    } finally {
+      await refresh();
+      router.refresh();
+    }
   };
 
   return (
@@ -186,7 +213,9 @@ export function ShopProvider({ children }: { children: ReactNode }) {
         refresh,
         login: () => setAuthOpen(true),
         run,
-        notice: setMessage,
+        notice,
+        reportError,
+        locationMode,
         add,
         setQuantity,
         logout,
@@ -197,8 +226,9 @@ export function ShopProvider({ children }: { children: ReactNode }) {
     >
       {children}
       {message && (
-        <div className="toast" role="status" onClick={() => setMessage('')}>
-          {message}
+        <div className={`toast${message.error ? ' toast-error' : ''}`} role={message.error ? 'alert' : 'status'}>
+          <span>{message.text}</span>
+          {message.error && <button type="button" className="text-button" aria-label="Закрыть сообщение" onClick={() => setMessage(null)}>Закрыть</button>}
         </div>
       )}
       {authOpen && (
@@ -223,24 +253,34 @@ function Login({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => P
     return () => clearTimeout(t);
   }, [resend]);
 
+  async function sendCode() {
+    setBusy(true);
+    setError('');
+    try {
+      const result = await requestPhoneCode(phone);
+      setLength(result.codeLength);
+      setPhone(result.phone);
+      setCode('');
+      setSent(true);
+      setResend(60);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Не удалось отправить код');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError('');
 
     try {
-      const normalized = '+7' + phone.replace(/\D/g, '').slice(-10);
       if (sent) {
-        await request('auth/phone-confirm', 'POST', { phone: normalized, code });
+        await confirmPhoneCode(phone, code, length);
         await onSuccess();
       } else {
-        const d = await request<{ codeLength?: number }>('auth/phone-login', 'POST', {
-          phone: normalized,
-          method: 'sms',
-        });
-        setLength(d.codeLength || 6);
-        setSent(true);
-        setResend(60);
+        await sendCode();
       }
     } catch (err: any) {
       setError(err instanceof Error ? err.message : 'Ошибка авторизации');
@@ -262,13 +302,13 @@ function Login({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => P
             Номер телефона
             <input
               autoFocus
+              data-modal-initial-focus
               type="tel"
               autoComplete="tel"
               required
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              onChange={(e) => { setPhone(e.target.value); setError(''); }}
               placeholder="+7 900 000-00-00"
-              minLength={11}
             />
           </label>
         ) : (
@@ -276,12 +316,12 @@ function Login({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => P
             Код подтверждения
             <input
               autoFocus
+              data-modal-initial-focus
               inputMode="numeric"
               autoComplete="one-time-code"
               pattern={`[0-9]{${length}}`}
-              maxLength={length}
               value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+              onChange={(e) => { setCode(e.target.value.replace(/\D/g, '')); setError(''); }}
               required
             />
           </label>
@@ -291,17 +331,14 @@ function Login({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => P
           {busy ? 'Подождите…' : sent ? 'Войти' : 'Получить код'}
         </button>
         {sent && (
-          <button
-            type="button"
-            className="text-button"
-            disabled={resend > 0}
-            onClick={() => {
-              setSent(false);
-              setCode('');
-            }}
-          >
-            {resend > 0 ? `Повторить через ${resend} с` : 'Изменить номер или отправить код снова'}
-          </button>
+          <>
+            <button type="button" className="text-button" disabled={busy || resend > 0} onClick={() => void sendCode()}>
+              {resend > 0 ? `Повторить через ${resend} с` : 'Отправить код снова'}
+            </button>
+            <button type="button" className="text-button" disabled={busy} onClick={() => { setSent(false); setCode(''); setError(''); }}>
+              Изменить номер
+            </button>
+          </>
         )}
       </form>
     </Modal>

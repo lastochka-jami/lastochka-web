@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { product, itemAmount } from '../src/lib/types';
-import { addGuestCartItem, getGuestCart, setGuestCartQuantity, mergeGuestCartToServer, saveGuestCart } from '../src/lib/guest-cart';
+import { product, itemAmount, cartGroupTotals, cartTotal } from '../src/lib/types';
+import { addGuestCartItem, getGuestCart, setGuestCartQuantity, mergeGuestCartToServer, saveGuestCart, syncGuestCartStores } from '../src/lib/guest-cart';
 import { encodeSharedCart, parseSharedCart } from '../src/lib/shared-cart';
 
 const memory = new Map<string,string>();
@@ -70,4 +70,51 @@ test('partial transfer keeps rejects; lost response retries same server idempote
     assert.equal(serverKeys.size,2);
     assert.equal(getGuestCart().storeGroups!.length,0);
   } finally { globalThis.fetch=originalFetch; }
+});
+
+
+test('guest cart hydrates actual store address and capabilities and never invents pickup', () => {
+  memory.clear();
+  const cart = addGuestCartItem(portion);
+  assert.equal(cart.storeGroups![0].store.isPickupEnabled, undefined);
+  const store = { id: 3, name: 'Ласточка на Ленина', address: 'ул. Ленина, 20', isPickupEnabled: false, pickupPaymentMethods: ['cash'], minOrderAmount: 500 };
+  const hydrated = syncGuestCartStores([store]);
+  assert.deepEqual(hydrated.storeGroups![0].store, store);
+  assert.deepEqual(getGuestCart().storeGroups![0].store, store);
+  const updated = addGuestCartItem(portion, [], 200, { ...store, isPickupEnabled: true });
+  assert.equal(updated.storeGroups![0].store.isPickupEnabled, true);
+  assert.equal(updated.storeGroups![0].items[0].quantity, 400);
+  const missing = syncGuestCartStores([]);
+  assert.equal(missing.storeGroups![0].store.isPickupEnabled, undefined);
+});
+
+test('header and cart totals share cent rounding, supplements, zero price, delivery and discounts', () => {
+  const group = { store: { id: 3, name: 'Ласточка' }, items: [
+    { id: 1, product: portion, quantity: 400, supplements: [{ supplementId: 1, valueIds: [8] }] },
+    { id: 2, product: portion, quantity: 200, price: 0 },
+  ], assemblyCost: 10.1, deliveryCost: 80.2, discount: 5.3 };
+  assert.deepEqual(cartGroupTotals(group), { items: 115.6, assembly: 10.1, delivery: 80.2, discount: 5.3, total: 200.6 });
+  assert.equal(cartTotal({ storeGroups: [group] }), cartGroupTotals(group).total);
+  assert.equal(cartTotal({ storeGroups: [group] }, true), 120.4);
+  assert.equal(cartGroupTotals(group, true, 20).total, 100.4);
+});
+
+test('simultaneous guest merge calls share one transfer and send each item once', async () => {
+  memory.clear();
+  addGuestCartItem(portion);
+  const originalFetch = globalThis.fetch;
+  let writes = 0;
+  globalThis.fetch = async (url, options) => {
+    if (String(url) === '/api/session') return Response.json({ csrf: 'test' });
+    writes++;
+    assert.equal(JSON.parse(options?.body as string).storeId, 3);
+    return Response.json({ data: { storeGroups: [] } });
+  };
+  try {
+    const [first, second] = await Promise.all([mergeGuestCartToServer(), mergeGuestCartToServer()]);
+    assert.deepEqual(first, { accepted: 1, remaining: 0 });
+    assert.deepEqual(second, first);
+    assert.equal(writes, 1);
+    assert.equal(getGuestCart().totalToPay, 0);
+  } finally { globalThis.fetch = originalFetch; }
 });

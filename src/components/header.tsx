@@ -32,9 +32,11 @@ import {
 } from './location-sheet';
 import { useShop } from './shop-context';
 import { request } from '@/lib/client';
-import { list, money, Store, CartItem, product, type Address, itemAmount, quantityLabel } from '@/lib/types';
+import { list, money, Store, CartItem, product, type Address, itemAmount, quantityLabel, cartItems, cartTotal } from '@/lib/types';
 import { Modal, Photo } from './ui';
 import { HomeBrandLink } from './home-brand-link';
+import { readLocation } from '@/lib/fulfillment';
+import { NavigationScroll } from './navigation-scroll';
 
 function getInnerScreenTitle(path: string): string | null {
   if (path === '/profile') return 'Профиль';
@@ -66,25 +68,15 @@ export function Header({ store }: { store: Store | null }) {
   const [cartPreviewOpen, setCartPreviewOpen] = useState(false);
   const cartPreviewTimeout = useRef<NodeJS.Timeout | null>(null);
 
-  const items: CartItem[] =
-    s.cart?.storeGroups?.flatMap((g) => g.items) ||
-    s.cart?.dateGroups?.flatMap((g) => g.items) ||
-    [];
-  const firstGroup = s.cart?.storeGroups?.[0];
-  const calculatedItemsTotal = items.reduce(
-    (acc, it) => acc + itemAmount(it),
-    0,
-  );
-  const total = calculatedItemsTotal > 0 ? calculatedItemsTotal : undefined;
+  const items = cartItems(s.cart);
+  const total = cartTotal(s.cart, s.locationMode === 'pickup');
 
   const innerTitle = getInnerScreenTitle(path);
 
   useEffect(() => {
-    const savedMode = window.localStorage.getItem(LOCATION_MODE_STORAGE_KEY);
-    if (savedMode === 'delivery' || savedMode === 'pickup') {
-      setLocationTab(savedMode);
-      setLocationSelection((current) => ({ ...current, mode: savedMode }));
-    }
+    const saved = readLocation();
+    setLocationTab(saved.mode);
+    setLocationSelection(saved);
 
     const openLocation = (event: Event) => {
       const requestedTab = (event as CustomEvent<LocationMode>).detail;
@@ -148,6 +140,12 @@ export function Header({ store }: { store: Store | null }) {
     { href: '/profile', title: 'Профиль', Icon: UserRound },
   ];
 
+  useEffect(() => () => {
+    if (cartPreviewTimeout.current) clearTimeout(cartPreviewTimeout.current);
+  }, []);
+
+  useEffect(() => { setCartPreviewOpen(false); }, [path]);
+
   const handleCartMouseEnter = () => {
     if (cartPreviewTimeout.current) clearTimeout(cartPreviewTimeout.current);
     setCartPreviewOpen(true);
@@ -161,6 +159,7 @@ export function Header({ store }: { store: Store | null }) {
 
   return (
     <>
+      <NavigationScroll />
       <div className="topline">
         <div className="container">
           <span>Продукты, выпечка и готовые блюда с доставкой от «Ласточки»</span>
@@ -239,10 +238,10 @@ export function Header({ store }: { store: Store | null }) {
               if (!event.currentTarget.contains(event.relatedTarget)) handleCartMouseLeave();
             }}
           >
-            <Link className="cart-button" href="/cart">
+            <Link className="cart-button" href="/cart" aria-label={`Открыть корзину${items.length ? `, ${items.length} поз., ${money(total)}` : ", пуста"}`}>
               <ShoppingBasket />
               <span>
-                {typeof total === 'number' && total > 0 ? `≈ ${money(total)}` : 'Корзина'}
+                {typeof total === 'number' && total > 0 ? money(total) : 'Корзина'}
                 {items.length > 0 && <small>{items.length}</small>}
               </span>
             </Link>
@@ -272,7 +271,7 @@ export function Header({ store }: { store: Store | null }) {
                             <div className="cart-preview-info">
                               <span className="cart-preview-title">{normalized.title}</span>
                               <small className="muted">
-                                {quantityLabel(normalized, it.quantity)} · {money(it.price || normalized.price)}
+                                {quantityLabel(normalized, it.quantity)} · {money(itemAmount(it))}
                               </small>
                             </div>
                           </div>
@@ -286,14 +285,14 @@ export function Header({ store }: { store: Store | null }) {
                     <div className="cart-preview-footer">
                       <div className="cart-preview-total">
                         <span>Итого:</span>
-                        <strong>{typeof total === 'number' ? `≈ ${money(total)}` : '—'}</strong>
+                        <strong>{typeof total === 'number' ? money(total) : '—'}</strong>
                       </div>
                       <Link
                         href="/cart"
                         className="primary cart-preview-checkout-btn"
                         onClick={() => setCartPreviewOpen(false)}
                       >
-                        Перейти к оформлению <ArrowRight size={16} />
+                        Открыть корзину <ArrowRight size={16} />
                       </Link>
                     </div>
                   </>
@@ -354,7 +353,7 @@ export function Header({ store }: { store: Store | null }) {
         <div className={`float-actions ${path.startsWith("/product/") || path === "/cart" ? "hidden-on-product" : ""}`} aria-label="Быстрые действия">
           <Link className="float-cart-btn" href="/cart" aria-label="Открыть корзину">
             <ShoppingBasket size={19} />
-            <span>{typeof total === 'number' && total > 0 ? `≈ ${money(total)}` : 'Корзина'}</span>
+            <span>{typeof total === 'number' && total > 0 ? money(total) : 'Корзина'}</span>
           </Link>
         </div>
       )}
@@ -386,7 +385,7 @@ export function SearchBox({ onOpenScanner }: { onOpenScanner?: () => void } = {}
 
   useEffect(() => {
     if (pathname === '/search' && !q) {
-      inputRef.current?.focus();
+      inputRef.current?.focus({ preventScroll: true });
     }
   }, [pathname]);
 

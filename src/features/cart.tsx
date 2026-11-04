@@ -36,10 +36,13 @@ import {
   truth,
   Product,
   itemAmount,
+  cartGroupTotals,
+  formatAvailabilityText,
 } from '@/lib/types';
 import { useRemote } from './account/hooks/use-remote';
 import { goPayment } from './account/orders/orders-view';
-import { LOCATION_MODE_STORAGE_KEY, LOCATION_CHANGED_EVENT, LocationSelection, activateDeliveryAddressForStore } from '@/components/location-sheet';
+import { activateDeliveryAddressForStore } from '@/components/location-sheet';
+import { announceLocation, readLocation, LOCATION_CHANGED_EVENT, type LocationSelection } from '@/lib/fulfillment';
 import { clearGuestCart, getGuestCart, mergeGuestCartToServer } from '@/lib/guest-cart';
 
 export function CartPage() {
@@ -52,7 +55,7 @@ function CartContent() {
   const addressesRemote = useRemote<Address[]>(s.authenticated ? 'addresses' : null);
   const settingsRemote = useRemote<any>('app-settings');
 
-  const [mode, setMode] = useState<'courier' | 'pickup'>('courier');
+  const mode = s.locationMode === 'pickup' ? 'pickup' : 'courier';
   const [addressId, setAddressId] = useState('');
   const [guestAddress, setGuestAddress] = useState({
     city: 'Нальчик',
@@ -73,17 +76,16 @@ function CartContent() {
   const [spend, setSpend] = useState('');
   const [reviewModal, setReviewModal] = useState<any>();
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
-  const [localCart, setLocalCart] = useState<Cart | null>(null);
   const [termsAgreed, setTermsAgreed] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
 
   const lock = useRef(false);
 
-  const cart = localCart || s.cart;
+  const cart = s.cart;
   const groups: CartStoreGroup[] = cart?.storeGroups || [];
   const [selectedStore, setSelectedStore] = useState<number>();
-  const group = groups.find(g => g.store.id === selectedStore) || groups[0];
-  const storeId = group?.store?.id || 2;
+  const group = groups.find(g => g.store.id === (selectedStore || s.storeId)) || groups[0];
+  const storeId = group?.store?.id || s.storeId;
 
   const appSettings = unwrap<any>(settingsRemote.data);
 
@@ -110,30 +112,25 @@ function CartContent() {
   const items: CartItem[] = group?.items || [];
   const cartVersion = JSON.stringify(items.map(i => [i.id, i.quantity, i.supplements]));
 
-  // Базовая стоимость товаров: сумма цен позиций в корзине
-  const calculatedItemsTotal = items.reduce(
-    (acc, it) => acc + itemAmount(it),
-    0,
-  );
-
-  // The API exposes components, but no confirmed order preview. This stays an estimate.
-  const total = Math.max(0, calculatedItemsTotal + (group?.assemblyCost ?? 0) + (mode === 'courier' ? group?.deliveryCost ?? 0 : 0) - (group?.discount ?? 0) - (bonus === 'spend' ? Math.min(group?.bonus?.maxSpend || 0, group?.bonus?.userBalance || 0, Math.max(0, Math.floor(Number(spend) || 0))) : 0));
+  const bonusSpend = bonus === 'spend' ? Math.min(group?.bonus?.maxSpend || 0, group?.bonus?.userBalance || 0, Math.max(0, Math.floor(Number(spend) || 0))) : 0;
+  const totals = group ? cartGroupTotals(group, mode === 'pickup', bonusSpend) : { items: 0, total: 0 };
+  const calculatedItemsTotal = totals.items;
+  const total = totals.total;
 
   useEffect(() => {
-    const saved = localStorage.getItem(LOCATION_MODE_STORAGE_KEY);
-    if (saved) setMode(saved === 'pickup' ? 'pickup' : 'courier');
-    const update = (e: Event) => setMode((e as CustomEvent<LocationSelection>).detail.mode === 'pickup' ? 'pickup' : 'courier');
-    window.addEventListener(LOCATION_CHANGED_EVENT, update);
-    return () => window.removeEventListener(LOCATION_CHANGED_EVENT, update);
+    const update = (selection: LocationSelection) => {
+      if (selection.storeId) setSelectedStore(selection.storeId);
+      setAddressId(selection.mode === 'delivery' && selection.addressId ? String(selection.addressId) : '');
+    };
+    update(readLocation());
+    const changed = (event: Event) => update((event as CustomEvent<LocationSelection>).detail);
+    window.addEventListener(LOCATION_CHANGED_EVENT, changed);
+    return () => window.removeEventListener(LOCATION_CHANGED_EVENT, changed);
   }, []);
   useEffect(() => { setSlot(''); setReviewModal(undefined); }, [date, cartVersion]);
   useEffect(() => {
     if (!paymentMethods?.includes(payment)) setPayment(paymentMethods?.[0] || '');
   }, [JSON.stringify(paymentMethods), payment]);
-
-  useEffect(() => {
-    setLocalCart(null);
-  }, [s.cart]);
 
   useEffect(() => {
     if (s.authenticated && addressesRemote.data) {
@@ -144,23 +141,25 @@ function CartContent() {
     }
   }, [addressesRemote.data, addressId, s.authenticated]);
 
-  useEffect(() => {
-    let alive = true;
-    setSlot('');
-    setReviewModal(undefined);
-    if (storeId && s.authenticated) {
-      void s.run(async () => {
-        const latest = unwrap<Cart>(
-          await request(`cart?shippingMethod=${mode}${addressId ? '&addressId=' + addressId : ''}`),
-        );
-        if (alive) setLocalCart(latest);
-      });
-    }
-    return () => { alive = false; };
-  }, [mode, addressId, storeId, s.authenticated]);
+  useEffect(() => { setSlot(''); setReviewModal(undefined); }, [mode, addressId, storeId]);
+
+  async function changeMode(next: 'delivery' | 'pickup') {
+    await s.run(async () => {
+      if (next === 'pickup') {
+        if (group?.store?.isPickupEnabled !== true) throw new Error('Самовывоз в этом магазине недоступен');
+        if (storeId !== s.storeId) await request('/api/store', 'POST', { storeId });
+        announceLocation({ mode: 'pickup', storeId, label: group.store.address || group.store.name });
+      } else if (s.authenticated && addressId) {
+        const address = list<Address>(addressesRemote.data).find(item => item.id === Number(addressId));
+        await activateDeliveryAddressForStore(Number(addressId), storeId, address && [address.city, address.street, address.houseNumber].filter(Boolean).join(', '));
+      } else {
+        announceLocation({ mode: 'delivery' });
+      }
+    });
+  }
 
   async function handleClearCart() {
-    if (items.some(i => i.transferKey)) { s.notice('Сначала повторите перенос: ответ по некоторым позициям не получен.'); return; }
+    if (items.some(i => i.transferKey)) { s.reportError('Сначала повторите перенос: ответ по некоторым позициям не получен.'); return; }
     if (!confirm('Удалить все товары из корзины?')) return;
     if (s.authenticated) {
       await s.run(async () => {
@@ -176,7 +175,7 @@ function CartContent() {
 
   function handleShare() {
     if (!items.length) {
-      s.notice('В вашей корзине пока нет товаров');
+      s.reportError('В вашей корзине пока нет товаров');
       return;
     }
     setShareModalOpen(true);
@@ -199,7 +198,7 @@ function CartContent() {
         );
 
         if (JSON.stringify(current) !== JSON.stringify(reviewModal.cart)) {
-          setLocalCart(current);
+          await s.refresh();
           setReviewModal(undefined);
           throw new Error('Данные корзины изменились. Проверьте позиции и сумму.');
         }
@@ -260,14 +259,15 @@ function CartContent() {
     <ul>{retainedItems.map(i => <li key={i.id}>{i.product.title}: {i.quantity} {i.product.measurementUnitLabel}</li>)}</ul>
     <button className="secondary" type="button" onClick={() => s.run(async () => {
       const result = await mergeGuestCartToServer();
-      s.notice(`Перенесено: ${result.accepted}, осталось на устройстве: ${result.remaining}. Если безопасный срок повтора истёк, требуется сверка с магазином.`);
+      if (result.remaining) s.reportError(`Перенесено: ${result.accepted}, осталось на устройстве: ${result.remaining}. Повторите перенос; если срок повтора истёк, свяжитесь с магазином.`);
+      else s.notice('Все сохранённые товары перенесены');
       await s.refresh();
     })}>Повторить перенос сохранённых товаров</button>
   </div> : null;
 
   if (!items.length) {
     return (
-      <Empty title={retainedItems.length ? "Не все товары перенесены" : "В корзине пока пусто"}>
+      <Empty headingLevel={1} title={retainedItems.length ? "Не все товары перенесены" : "В корзине пока пусто"}>
         {transferPanel}
         <p>Добавьте любимые продукты, свежую выпечку или готовые блюда.</p>
         <Link className="primary" href="/catalog">
@@ -335,7 +335,7 @@ function formatRub(v: unknown): string {
         <span>Сборка</span>
         <span>{typeof group?.assemblyCost === "number" ? formatRub(group.assemblyCost) : "Уточняется"}</span>
       </div>
-      {typeof group?.deliveryCost === 'number' && group.deliveryCost > 0 && (
+      {mode === 'courier' && typeof group?.deliveryCost === 'number' && group.deliveryCost > 0 && (
         <div className="cart-summary-line">
           <span>Доставка</span>
           <span>{formatRub(group.deliveryCost)}</span>
@@ -439,15 +439,15 @@ function formatRub(v: unknown): string {
               <button
                 type="button"
                 className={`cart-mode-pill ${mode === 'courier' ? 'active' : ''}`}
-                onClick={() => { setMode('courier'); localStorage.setItem(LOCATION_MODE_STORAGE_KEY, 'delivery'); window.dispatchEvent(new CustomEvent(LOCATION_CHANGED_EVENT, { detail: { mode: 'delivery' } })); }}
+                onClick={() => void changeMode('delivery')}
               >
                 Доставка
               </button>
-              {group?.store?.isPickupEnabled && (
+              {group?.store?.isPickupEnabled === true && (
                 <button
                   type="button"
                   className={`cart-mode-pill ${mode === 'pickup' ? 'active' : ''}`}
-                  onClick={() => { setMode('pickup'); localStorage.setItem(LOCATION_MODE_STORAGE_KEY, 'pickup'); window.dispatchEvent(new CustomEvent(LOCATION_CHANGED_EVENT, { detail: { mode: 'pickup' } })); }}
+                  onClick={() => void changeMode('pickup')}
                 >
                   Самовывоз
                 </button>
@@ -549,7 +549,7 @@ function formatRub(v: unknown): string {
                 <MapPin size={18} className="cart-address-icon" />
                 <div>
                   <strong>{group?.store?.name || 'Магазин «Ласточка»'}</strong>
-                  <p className="muted">{group?.store?.address || 'Адрес магазина'}</p>
+                  <p className="muted">{group?.store?.address || 'Уточните адрес магазина'}</p>
                 </div>
               </div>
             )}
@@ -732,8 +732,8 @@ function formatRub(v: unknown): string {
                         <div className="cart-upsell-image-wrap">
                           <Photo src={norm.preview || undefined} alt={norm.title} />
                           {norm.availableFrom && (
-                            <span className="cart-upsell-avail-badge">
-                              <Clock size={10} /> Доступн...
+                            <span className="cart-upsell-avail-badge compact-availability">
+                              <Clock size={10} /> {formatAvailabilityText(norm.availableFrom)}
                             </span>
                           )}
                         </div>
