@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from 'next';
 import Link from 'next/link';
-import { Suspense } from 'react';
 import { ShopProvider } from '@/components/shop-context';
 import { Header } from '@/components/header';
 import { HomeBrandLink } from '@/components/home-brand-link';
@@ -65,9 +64,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           Перейти к содержимому
         </a>
         <ShopProvider>
-          <Suspense>
-            <Header store={store} />
-          </Suspense>
+          <Header store={store} />
           <main id="main" className="container">
             {children}
           </main>

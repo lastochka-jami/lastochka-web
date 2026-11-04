@@ -16,9 +16,9 @@ async function clickable(locator:Locator) {
 
 test('banner boundary removes missing target while direct product keeps 404',async({page})=>{
   await page.goto('/');
-  await expect(page.locator('.home-banner')).toHaveCount(1);
+  await expect(page.locator('.home-banner:visible')).toHaveCount(1);
   await expect(page.locator('a[href="/product/3244"]')).toHaveCount(0);
-  await page.locator('.home-banner').click();
+  await page.locator('.home-banner:visible').click();
   await expect(page.locator('.product-detail h1:visible')).toContainText('Порция');
   const response=await page.goto('/product/3244');
   expect(response!.status()).toBe(404);
@@ -105,4 +105,15 @@ test('mobile counters fit cards and desktop preview remains inside short viewpor
   await expect(preview.getByRole('link',{name:'Перейти к оформлению'})).toHaveCount(0);
   await preview.getByRole('link',{name:'Открыть корзину'}).click();
   await expect(page).toHaveURL(/\/cart$/);
+});
+
+test('cold home inserts secondary content below the settled first screen without layout shifts',async({page})=>{
+  await page.addInitScript(()=>{
+    (window as any).homeCls=0;
+    new PerformanceObserver(list=>{for(const entry of list.getEntries() as any)if(!entry.hadRecentInput)(window as any).homeCls+=entry.value;}).observe({type:'layout-shift',buffered:true});
+  });
+  await page.goto('/');
+  await page.waitForLoadState('networkidle');
+  await expect(page.locator('.home-banner:visible')).toHaveCount(1);
+  expect(await page.evaluate(()=>(window as any).homeCls)).toBeLessThan(0.1);
 });

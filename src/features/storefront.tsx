@@ -95,7 +95,7 @@ async function HomeBanners({ store }: { store: number }) {
   return (
     <section className="home-banners-section" aria-label="Акции магазина">
       <div className="home-banners">
-        {banners.map((banner, index) => {
+        {banners.map((banner) => {
           const href = bannerHref(banner);
           const tile = (
             <>
@@ -103,7 +103,6 @@ async function HomeBanners({ store }: { store: number }) {
                 src={banner.image?.path}
                 alt={banner.title}
                 sizes="(max-width: 767px) calc(100vw - 28px), (max-width: 1399px) calc((100vw - 64px) / 2), 648px"
-                eager={index === 0}
               />
               <strong>{banner.title}</strong>
             </>
@@ -174,8 +173,14 @@ async function HomeFeatured({ store, groups }: { store: number; groups: Promise<
 
 export async function Home() {
   const store = await selectedStore();
-  const groups = publicApi(`stores/${store}/product-groups`).then(list<ProductGroupDto>).catch(() => []);
-  const categories = publicApi(`stores/${store}/categories?includeChildren=true&perPage=100`).then(list<HomeCategory>).catch(() => []);
+  // Settle the above-fold structure together: streaming an empty slot before it
+  // inserts late sections and shifts content that the customer is already reading.
+  const [groupItems, categoryItems] = await Promise.all([
+    publicApi(`stores/${store}/product-groups`).then(list<ProductGroupDto>).catch(() => []),
+    publicApi(`stores/${store}/categories?includeChildren=true&perPage=100`).then(list<HomeCategory>).catch(() => []),
+  ]);
+  const groups = Promise.resolve(groupItems);
+  const categories = Promise.resolve(categoryItems);
 
   return (
     <>
@@ -191,20 +196,8 @@ export async function Home() {
         <LoyaltyCard compact />
       </section>
       <div className="home-sheet">
-        <Suspense fallback={null}><HomeStories /></Suspense>
-        <Suspense fallback={null}><HomeBanners store={store} /></Suspense>
-        <Suspense fallback={
-          <section className="home-showcase-section category-loading" aria-busy="true">
-            <SectionHeading title="Популярные категории" href="/catalog" />
-            <div className="category-tiles" aria-hidden="true">
-              {Array.from({ length: 6 }, (_, index) => <span className="category-tile" key={index} />)}
-            </div>
-          </section>
-        }>
-          <HomeCategories categories={categories} />
-        </Suspense>
-        <Suspense fallback={null}><HomeCollections groups={groups} /></Suspense>
-        <Suspense fallback={null}><HomeFeatured store={store} groups={groups} /></Suspense>
+        <HomeCategories categories={categories} />
+        <HomeCollections groups={groups} />
         <section className="catalog-hint-section">
           <div className="catalog-hint-card">
             <div className="catalog-hint-info">
@@ -214,6 +207,9 @@ export async function Home() {
             <Link href="/catalog" className="catalog-hint-button">Открыть каталог <ArrowRight size={18} /></Link>
           </div>
         </section>
+        <Suspense fallback={null}><HomeStories /></Suspense>
+        <Suspense fallback={null}><HomeBanners store={store} /></Suspense>
+        <Suspense fallback={null}><HomeFeatured store={store} groups={groups} /></Suspense>
       </div>
     </>
   );
