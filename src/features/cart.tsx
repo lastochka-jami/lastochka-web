@@ -13,7 +13,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
-  ShieldCheck,
   CreditCard,
   Truck,
   Store as StoreIcon,
@@ -296,7 +295,7 @@ function formatRub(v: unknown): string {
     : 'Выберите время';
 
   // Common payment and summary elements to share between mobile view and desktop sidebar
-  const paymentSection = (
+  const paymentSection = paymentMethods?.length ? (
     <div className="cart-payment-section">
       <h3>Способ оплаты</h3>
       <div className="cart-payment-list">
@@ -323,7 +322,7 @@ function formatRub(v: unknown): string {
         })}
       </div>
     </div>
-  );
+  ) : null;
 
   const summarySection = (
     <div className="cart-summary-block">
@@ -350,7 +349,7 @@ function formatRub(v: unknown): string {
       {group?.store?.minOrderAmount && calculatedItemsTotal < group.store.minOrderAmount ? <p className="muted">Минимальная сумма товаров: {money(group.store.minOrderAmount)}</p> : null}
       <div className="cart-summary-line-divider" />
       <div className="cart-summary-total-line">
-        <strong>Предварительная оценка</strong>
+        <strong>Оценка заказа</strong>
         <strong className="cart-summary-total-amount">{formatRub(total)}</strong>
       </div>
       <div className="cart-summary-points-hint">
@@ -429,7 +428,7 @@ function formatRub(v: unknown): string {
       {groups.length > 1 && <label>Магазин корзины<select value={storeId} onChange={e => setSelectedStore(Number(e.target.value))}>{groups.map(g => <option key={g.store.id} value={g.store.id}>{g.store.name}</option>)}</select></label>}
       {transferPanel}
       {s.cartError && <ErrorMessage message={s.cartError} retry={s.refresh} />}
-      <p className="notice-banner">Предварительная оценка. Онлайн-оформление временно недоступно.</p>
+      <p className="cart-availability-note">Онлайн-оформление временно недоступно. Корзина сохранена.</p>
       <form onSubmit={prepareOrder} className="cart-form-root">
         <div className="cart-layout-two-column">
           {/* Left / Main Column */}
@@ -541,7 +540,7 @@ function formatRub(v: unknown): string {
                     </Link>
                   </div>
                 ) : (
-                  <p className="muted">Войдите, чтобы выбрать сохранённый адрес доставки. Гостевая корзина хранится на этом устройстве.</p>
+                  <p className="muted">Войдите, чтобы выбрать сохранённый адрес доставки.</p>
                 )}
               </div>
             ) : (
@@ -640,7 +639,7 @@ function formatRub(v: unknown): string {
                 rows={2}
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
-                placeholder="Пиццу очень ждём тёпленькой! :)"
+                placeholder="Например, пожелания к сборке заказа"
                 maxLength={1000}
               />
             </div>
@@ -823,11 +822,6 @@ function formatRub(v: unknown): string {
 
               {summarySection}
               {ctaSection}
-
-              <div className="security-notice">
-                <ShieldCheck size={16} />
-                <span>Безопасная оплата картой или при получении</span>
-              </div>
             </div>
           </div>
         </div>
