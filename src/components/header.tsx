@@ -169,7 +169,7 @@ export function Header({ store }: { store: Store | null }) {
 
       <header
         className={`header ${innerTitle ? 'header-has-app-bar' : ''} ${
-          path === '/cart' ? 'header-on-cart' : path === '/profile' ? 'header-on-profile' : ''
+          path.startsWith('/product/') ? 'header-on-product' : path === '/cart' ? 'header-on-cart' : path === '/profile' ? 'header-on-profile' : ''
         } ${path === '/' ? 'header-home-peach' : ''}`}
       >
         {/* Contextual Mobile App Bar on inner screens */}

@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState, useEffect, useRef } from 'react';
 import {
   Heart,
@@ -11,6 +12,7 @@ import {
   ArrowUpRight,
   ArrowRight,
   Clock,
+  ChevronLeft,
 } from 'lucide-react';
 import {
   Product,
@@ -412,6 +414,7 @@ export function QuickProduct({ id, onClose }: { id: number; onClose: () => void 
 }
 
 export function ProductDetail({ p: initial, stickyBuy = false }: { p: Product; stickyBuy?: boolean }) {
+  const router = useRouter();
   const [p, setP] = useState(initial);
   const variantRequest = useRef(0);
   const [imageIndex, setImage] = useState(0);
@@ -435,8 +438,31 @@ export function ProductDetail({ p: initial, stickyBuy = false }: { p: Product; s
   return (
     <div className={`product-detail ${stickyBuy ? 'has-mobile-buy-bar' : ''}`}>
       <div className="gallery">
+        <div className="detail-actions">
+          {stickyBuy && <button type="button" className="icon-button product-back" aria-label="Назад" onClick={() => window.history.length > 1 ? router.back() : router.push('/catalog')}><ChevronLeft size={22} /></button>}
+          <Favorite p={p} />
+          <button
+            className="icon-button"
+            aria-label="Поделиться товаром"
+            type="button"
+            onClick={() =>
+              s.run(async () => {
+                const url = location.origin + '/shop/product/' + p.id;
+                if (navigator.share) {
+                  await navigator.share({ title: p.title, url });
+                } else {
+                  await navigator.clipboard.writeText(url);
+                  s.notice('Ссылка скопирована');
+                }
+              })
+            }
+          >
+            <Share2 size={19} />
+          </button>
+        </div>
+
         <Photo
-          src={p.images?.[imageIndex]?.path}
+          src={p.images?.[imageIndex]?.path || p.preview}
           alt={p.title}
           sizes="(max-width: 767px) calc(100vw - 28px), (max-width: 1023px) calc((100vw - 72px) * 0.45), (max-width: 1399px) calc((100vw - 138px) * 0.55), 699px"
           eager={stickyBuy && imageIndex === 0}
@@ -458,27 +484,6 @@ export function ProductDetail({ p: initial, stickyBuy = false }: { p: Product; s
         )}
       </div>
       <div className="product-information">
-        <div className="detail-actions">
-          <Favorite p={p} />
-          <button
-            className="icon-button"
-            aria-label="Поделиться товаром"
-            type="button"
-            onClick={() =>
-              s.run(async () => {
-                const url = location.origin + '/shop/product/' + p.id;
-                if (navigator.share) {
-                  await navigator.share({ title: p.title, url });
-                } else {
-                  await navigator.clipboard.writeText(url);
-                  s.notice('Ссылка скопирована');
-                }
-              })
-            }
-          >
-            <Share2 size={19} />
-          </button>
-        </div>
         {p.category && (
           <Link className="eyebrow" href={'/category/' + (p.category.slug || p.category.id)}>
             {p.category.name}
@@ -601,13 +606,13 @@ export function ProductDetail({ p: initial, stickyBuy = false }: { p: Product; s
 
         {p.additionalInfo && <p>{p.additionalInfo}</p>}
       </div>
-      {stickyBuy && !missing && (
+      {stickyBuy && (
         <div className="mobile-product-buy-bar" aria-label="Быстрая покупка">
           <div>
             <small>{p.weight && p.weight > 0 ? `${p.weight} г` : quantityLabel(p, step(p))}</small>
-            <strong>{money(p.price)}</strong>
+            <strong>{p.priceOld && p.priceOld > p.price ? <del>{money(p.priceOld)}</del> : null} {money(p.price)}</strong>
           </div>
-          <Buy p={p} supplements={supplements} />
+          {missing ? <button className="add-button" type="button" disabled>Выберите добавки</button> : <Buy p={p} supplements={supplements} />}
         </div>
       )}
     </div>
