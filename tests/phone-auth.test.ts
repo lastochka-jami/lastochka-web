@@ -21,7 +21,7 @@ test('OTP flow uses normalized phone, validates before requests and preserves AP
   globalThis.fetch = async (url, options) => {
     const path = String(url);
     // This mock intercepts every fetch; no network or SMS provider is contacted.
-    if (path === '/api/session') return Response.json({ csrf: 'mock-csrf' });
+    if (path === '/shop/api/session') return Response.json({ csrf: 'mock-csrf' });
     calls.push({ path, body: JSON.parse(options?.body as string) });
     if (reject) return Response.json({ message: 'Неверный код' }, { status: 422 });
     return Response.json(path.endsWith('phone-login') ? { data: { codeLength: 4 } } : { user: { id: 1 } });
@@ -31,11 +31,11 @@ test('OTP flow uses normalized phone, validates before requests and preserves AP
     assert.equal(calls.length, 0);
     const sent = await requestPhoneCode('8 (999) 123-45-67');
     assert.deepEqual(sent, { phone: '+79991234567', codeLength: 4 });
-    assert.deepEqual(calls[0], { path: '/api/shop/auth/phone-login', body: { phone: '+79991234567', method: 'sms' } });
+    assert.deepEqual(calls[0], { path: '/shop/api/shop/auth/phone-login', body: { phone: '+79991234567', method: 'sms' } });
     await assert.rejects(confirmPhoneCode(sent.phone, '123', sent.codeLength), /4 цифр/);
     assert.equal(calls.length, 1);
     await confirmPhoneCode(sent.phone, '0012', sent.codeLength);
-    assert.deepEqual(calls[1], { path: '/api/shop/auth/phone-confirm', body: { phone: '+79991234567', code: '0012' } });
+    assert.deepEqual(calls[1], { path: '/shop/api/shop/auth/phone-confirm', body: { phone: '+79991234567', code: '0012' } });
     reject = true;
     await assert.rejects(confirmPhoneCode(sent.phone, '0000', sent.codeLength), (error: any) => error.status === 422 && error.message === 'Неверный код');
   } finally { globalThis.fetch = originalFetch; }

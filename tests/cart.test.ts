@@ -50,7 +50,7 @@ test('partial transfer keeps rejects; lost response retries same server idempote
   let reject = true;
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url, options) => {
-    if(String(url)==='/api/session') return Response.json({csrf:'test'});
+    if(String(url)==='/shop/api/session') return Response.json({csrf:'test'});
     const body = JSON.parse(options?.body as string);
     if(body.productId===21 && reject) return Response.json({message:'Нет в наличии'},{status:422});
     const key = (options?.headers as Record<string,string>)['Idempotency-Key'];
@@ -105,7 +105,7 @@ test('simultaneous guest merge calls share one transfer and send each item once'
   const originalFetch = globalThis.fetch;
   let writes = 0;
   globalThis.fetch = async (url, options) => {
-    if (String(url) === '/api/session') return Response.json({ csrf: 'test' });
+    if (String(url) === '/shop/api/session') return Response.json({ csrf: 'test' });
     writes++;
     assert.equal(JSON.parse(options?.body as string).storeId, 3);
     return Response.json({ data: { storeGroups: [] } });

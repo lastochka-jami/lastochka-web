@@ -47,10 +47,10 @@ def point(link, target):
     os.replace(pending, link)
 
 
-def healthy(revision):
+def healthy(revision, prefix='/shop'):
     for _ in range(20):
         try:
-            with urllib.request.urlopen('http://127.0.0.1:13001/__deploy_revision.txt', timeout=3) as response:
+            with urllib.request.urlopen('http://127.0.0.1:13001' + prefix + '/__deploy_revision.txt', timeout=3) as response:
                 if response.read().decode().strip() == revision:
                     break
         except (OSError, ValueError):
@@ -59,7 +59,7 @@ def healthy(revision):
     else:
         raise RuntimeError('New revision did not become ready')
     for path in ['/', '/catalog', '/search']:
-        with urllib.request.urlopen('http://127.0.0.1:13001' + path, timeout=20) as response:
+        with urllib.request.urlopen('http://127.0.0.1:13001' + prefix + path, timeout=20) as response:
             if response.status != 200:
                 raise RuntimeError('HTTP smoke failed: ' + path)
 

@@ -8,7 +8,7 @@ test('filled guest cart can be viewed and edited at 320, 390, 768 and 1440 witho
   await page.addInitScript(value => localStorage.setItem('lastochka_guest_cart_v1', JSON.stringify(value)),cart);
   for (const width of [320,390,464,767,768,769,1024,1280,1440,1920]) {
     await page.setViewportSize({width,height:900});
-    await page.goto('/cart');
+    await page.goto('/shop/cart');
     const row = page.locator('.cart-item-row');
     await expect(row).toHaveCount(1);
     await expect(row.locator('.cart-item-bold-price')).toContainText('47,80');
@@ -36,7 +36,7 @@ test('mobile product actions remain clickable after adding a portion', async ({p
   test.setTimeout(120_000);
   for(const width of [320,390,464,767,768,769,1024,1280,1440,1920]) {
     await page.setViewportSize({width,height:900});
-    await page.goto('/product/10');
+    await page.goto('/shop/product/10');
     await page.evaluate(() => localStorage.removeItem('lastochka_guest_cart_v1'));
     await page.reload();
     await expect(page.locator('.product-detail h1:visible')).toBeVisible();
@@ -58,11 +58,11 @@ test('mobile product actions remain clickable after adding a portion', async ({p
 
 test('shared import adds exact quantity once and survives reload without duplicates', async ({page}) => {
   const link='v2.'+encodeURIComponent(JSON.stringify({version:2,items:[{id:10,storeId:2,quantity:200,supplements:[]}]}));
-  await page.goto('/share-cart#'+link);
+  await page.goto('/shop/share-cart#'+link);
   await page.getByRole('button',{name:'Добавить всё в корзину'}).click();
   await expect(page).toHaveURL(/\/cart/);
   await expect(page.locator('.cart-item-stepper-val')).toContainText('200');
-  await page.goto('/share-cart#'+link);
+  await page.goto('/shop/share-cart#'+link);
   await page.getByRole('button',{name:'Добавить всё в корзину'}).click();
   await expect(page).toHaveURL(/\/cart/);
   await expect(page.locator('.cart-item-stepper-val')).toContainText('200');
@@ -80,7 +80,7 @@ test('network errors show retry and stale slot responses cannot replace a new da
     await new Promise(resolve=>setTimeout(resolve,date==='2026-11-10'?250:20));
     await r.fulfill({json:{data:{slots:[{id:date==='2026-11-10'?10:11,timeSlot:date==='2026-11-10'?'Старый интервал':'Новый интервал'}],availablePaymentMethods:['cash']}}});
   });
-  await page.goto('/cart');
+  await page.goto('/shop/cart');
   await expect(page.getByText('Тестовая ошибка интервалов')).toBeVisible();
   fail=false;
   await page.getByRole('button',{name:'Попробовать ещё раз'}).click();
@@ -100,7 +100,7 @@ test('loyalty uses 100 whole bonuses and never fabricates a pending-card QR', as
   await page.route('**/api/shop/cart**',r=>r.fulfill({json:{data:cart}}));
   await page.route('**/api/shop/bonuses?**',r=>r.fulfill({json:{data:[{id:1,amount:100,description:'Тестовое начисление'}]}}));
   await page.route('**/api/shop/loyalty-card',r=>r.fulfill({json:{data:{status:'pending',balance:100}}}));
-  await page.goto('/bonuses');
+  await page.goto('/shop/bonuses');
   await expect(page.locator('.loyalty-number-text')).toHaveText('100');
   await page.getByRole('button',{name:'QR-код карты постоянного покупателя'}).click();
   await expect(page.getByText('Карта готовится. QR-код появится после подтверждения магазином.')).toBeVisible();
@@ -113,7 +113,7 @@ test('address editor has one form and cannot save unconfirmed default coordinate
   await page.route('**/api/session',r=>r.fulfill({json:{authenticated:true,csrf:'test',storeId:2,checkoutEnabled:false,publicOrigin:'http://127.0.0.1:3011'}}));
   await page.route('**/api/shop/cart**',r=>r.fulfill({json:{data:cart}}));
   await page.route('**/api/shop/addresses',r=>r.fulfill({json:{data:[]}}));
-  await page.goto('/addresses');
+  await page.goto('/shop/addresses');
   await page.getByRole('button',{name:'Добавить адрес',exact:true}).click();
   await expect(page.locator('form form')).toHaveCount(0);
   await expect(page.getByText('Выберите точку с помощью поиска или геолокации, чтобы увидеть её на карте.')).toBeVisible();
@@ -128,7 +128,7 @@ test('an empty server cart still offers retry for retained guest items', async (
   await page.route('**/api/shop/cart?**',r=>r.fulfill({json:{data:{storeGroups:[]}}}));
   let rejected=true;
   await page.route('**/api/shop/cart/items',r=>r.fulfill({status:rejected?422:200,json:{message:rejected?'Нет в наличии':'OK'}}));
-  await page.goto('/cart');
+  await page.goto('/shop/cart');
   const retry=page.getByRole('button',{name:'Повторить перенос сохранённых товаров'});
   await expect(retry).toBeVisible();
   await retry.click();
@@ -147,7 +147,7 @@ test('home, catalog and search fit all required widths with controlled API data'
   for (const width of [320,390,464,767,768,769,1024,1280,1440,1920]) {
     await page.setViewportSize({width,height:900});
     for (const path of ['/','/catalog','/search?query=салат']) {
-      await page.goto(path,{waitUntil:'networkidle'});
+      await page.goto('/shop' + path,{waitUntil:'networkidle'});
       await expect(page.locator('main')).toBeVisible();
       await expect(page.locator('main h1')).toHaveCount(1);
       expect(await page.evaluate(()=>document.documentElement.scrollWidth-innerWidth),`${path} at ${width}`).toBeLessThanOrEqual(1);

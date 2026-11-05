@@ -1,5 +1,7 @@
 'use client';
 
+import { appPath } from '@/lib/app-path';
+
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -173,7 +175,7 @@ export function BarcodeScannerModal({ isOpen, onClose }: BarcodeScannerModalProp
     }
 
     try {
-      const res = await fetch(`/api/barcode/${encodeURIComponent(code.trim())}`);
+      const res = await fetch(appPath(`/api/barcode/${encodeURIComponent(code.trim())}`));
       const json = await res.json();
 
       if (!res.ok || !json?.data) {
@@ -210,7 +212,7 @@ export function BarcodeScannerModal({ isOpen, onClose }: BarcodeScannerModalProp
     setBusy(true);
     setError('');
     try {
-      const res = await fetch(`/api/barcode/${encodeURIComponent(code)}`);
+      const res = await fetch(appPath(`/api/barcode/${encodeURIComponent(code)}`));
       const json = await res.json();
       if (!res.ok || !json?.data) {
         setError(json?.message || 'Товар с указанным штрихкодом не найден');

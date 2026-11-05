@@ -31,8 +31,11 @@ test('matches exact reference palette for all 17 categories and fallback', () =>
 
 
 test('payment callbacks always use the configured canonical origin',()=>{
-  assert.equal(paymentReturnUrl('/cards?binding=return','https://lastochka.duckdns.org'), 'https://lastochka.duckdns.org/cards?binding=return');
-  assert.equal(paymentReturnUrl('/payment','http://127.0.0.1:3000'), 'http://127.0.0.1:3000/payment');
+  assert.equal(paymentReturnUrl('/cards?binding=return','https://lastochka.duckdns.org'), 'https://lastochka.duckdns.org/shop/cards?binding=return');
+  assert.equal(paymentReturnUrl('/payment','http://127.0.0.1:3000'), 'http://127.0.0.1:3000/shop/payment');
+  assert.equal(paymentReturnUrl('/payment?orderId=10','https://lastochki.store'), 'https://lastochki.store/shop/payment?orderId=10');
+  assert.equal(paymentReturnUrl('/shop/cards?binding=return','https://lastochki.store'), 'https://lastochki.store/shop/cards?binding=return');
+  assert.throws(()=>paymentReturnUrl('//other.test/cards','https://lastochki.store'));
   assert.throws(()=>paymentReturnUrl('/cards','javascript:alert(1)'),/безопасный адрес/);
 });
 
@@ -42,7 +45,7 @@ test('client mutation sends idempotency key and refreshes CSRF once after 403', 
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     calls.push({ url, init });
-    if (url === '/api/session') {
+    if (url === '/shop/api/session') {
       const csrf = calls.filter((call) => call.url === url).length === 1 ? 'old' : 'fresh';
       return Response.json({ csrf });
     }
@@ -57,7 +60,7 @@ test('client mutation sends idempotency key and refreshes CSRF once after 403', 
       idempotencyKey: 'checkout-1',
     });
     assert.deepEqual(result, { ok: true });
-    const mutations = calls.filter((call) => call.url === '/api/shop/orders');
+    const mutations = calls.filter((call) => call.url === '/shop/api/shop/orders');
     assert.equal(mutations.length, 2);
     assert.equal(new Headers(mutations[0].init?.headers).get('Idempotency-Key'), 'checkout-1');
     assert.equal(new Headers(mutations[0].init?.headers).get('x-csrf-token'), 'old');

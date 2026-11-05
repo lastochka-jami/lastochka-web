@@ -3,7 +3,7 @@ export default function Loading() {
     <div className="brand-loading" role="status" aria-live="polite">
       <img
         className="brand-mark brand-loading-mark"
-        src="/images/brand-icon-v2.webp"
+        src="/shop/images/brand-icon-v2.webp"
         alt=""
         width={72}
         height={72}

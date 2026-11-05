@@ -6,7 +6,7 @@ const referenceViewports = [
 ] as const;
 
 async function assertResponsivePage(page: import('@playwright/test').Page, path: string) {
-  await page.goto(path, {waitUntil:'networkidle'});
+  await page.goto('/shop' + path, {waitUntil:'networkidle'});
   await expect(page.locator('main h1')).toHaveCount(1);
   const metrics=await page.evaluate(()=>{
     const interactive=[...document.querySelectorAll<HTMLElement>('button,a,input,select,textarea')];
@@ -42,17 +42,17 @@ async function assertResponsivePage(page: import('@playwright/test').Page, path:
 test('home, catalog, search and product links use live store data',async({page})=>{
   const errors:string[]=[];
   page.on('pageerror',error=>errors.push(error.message));
-  await page.goto('/');
+  await page.goto('/shop/');
   if((page.viewportSize()?.width||0)<=767)await expect(page.getByRole('button',{name:/Указать адрес доставки/})).toBeVisible();
   else await expect(page.getByRole('heading',{name:'Всё любимое — рядом'})).toBeVisible();
   await expect(page.getByRole('heading',{name:'Рекомендуем'})).toBeVisible();
-  await page.goto('/catalog');
+  await page.goto('/shop/catalog');
   await expect(page.getByRole('heading',{name:'Каталог',exact:true})).toBeVisible();
   await expect(page.locator('.catalog-category-section').first()).toBeVisible();
   const category=page.locator('.category-tile').first();
   await category.click();
   await expect(page.locator('.product-card').first()).toBeVisible();
-  await page.goto('/search?query=молоко');
+  await page.goto('/shop/search?query=молоко');
   await expect(page.getByRole('heading',{name:/Результаты поиска/})).toBeVisible();
   const product=page.locator('.product-card .product-title').first();
   await expect(product).toBeVisible();
@@ -62,7 +62,7 @@ test('home, catalog, search and product links use live store data',async({page})
 });
 
 test('location picker uses delivery and pickup tabs without leaving the page',async({page})=>{
-  await page.goto('/');
+  await page.goto('/shop/');
   if((page.viewportSize()?.width||0)<=767){
     await page.getByRole('button',{name:/Указать адрес доставки/}).first().click();
   }else{
@@ -78,7 +78,7 @@ test('location picker uses delivery and pickup tabs without leaving the page',as
 });
 
 test('layout has no horizontal overflow and browser history restores catalog',async({page})=>{
-  await page.goto('/search?query=молоко&page=1');
+  await page.goto('/shop/search?query=молоко&page=1');
   const first=page.locator('.product-card .product-title').first();
   await first.click();
   await expect(page).toHaveURL(/\/product\//);
@@ -93,7 +93,7 @@ test('key storefront pages do not overflow or sit behind fixed controls at refer
   for(const width of [390,768,1280,1440]){
     await page.setViewportSize({width,height:900});
     for(const path of ['/','/catalog','/category/food']){
-      await page.goto(path);
+      await page.goto('/shop' + path);
       const metrics=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth-document.documentElement.clientWidth,lastBottom:(document.querySelector('main')?.getBoundingClientRect().bottom||0),viewport:innerHeight}));
       expect(metrics.overflow,`${path} at ${width}px`).toBe(0);
       expect(await page.locator('main').isVisible()).toBe(true);
@@ -102,9 +102,9 @@ test('key storefront pages do not overflow or sit behind fixed controls at refer
 });
 
 test('anonymous cart remains accessible and personal pages request login',async({page})=>{
-  await page.goto('/cart');
+  await page.goto('/shop/cart');
   await expect(page.getByText('В корзине пока пусто')).toBeVisible();
-  await page.goto('/favorites');
+  await page.goto('/shop/favorites');
   await expect(page.getByRole('button',{name:'Войти по телефону'})).toBeVisible();
 });
 
@@ -126,17 +126,17 @@ test('responsive invariants hold at all required viewport widths',async({page},t
 test('mobile landscape and 200 percent text remain usable',async({page},testInfo)=>{
   test.skip(testInfo.project.name!=='mobile-chromium');
   await page.setViewportSize({width:844,height:390});
-  await page.goto('/');
+  await page.goto('/shop/');
   await page.evaluate(()=>document.documentElement.style.fontSize='200%');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth)).toBe(0);
   await expect(page.getByRole('link',{name:/Открыть каталог/})).toBeVisible();
-  await page.goto('/search?query=молоко');
+  await page.goto('/shop/search?query=молоко');
   await expect(page.locator('.product-card').first()).toBeVisible();
 });
 
 test('mobile shell has four tabs and separate search and cart actions',async({page},testInfo)=>{
   test.skip(testInfo.project.name!=='mobile-chromium');
-  await page.goto('/');
+  await page.goto('/shop/');
   await expect(page.locator('.bottom-nav a')).toHaveCount(4);
   await expect(page.locator('.bottom-nav').getByText('Корзина')).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Указать адрес доставки'})).toBeVisible();
@@ -146,7 +146,7 @@ test('mobile shell has four tabs and separate search and cart actions',async({pa
 });
 
 test('search suggestions and login dialog work from the keyboard',async({page})=>{
-  await page.goto((page.viewportSize()?.width||0)<=767?'/search':'/');
+  await page.goto((page.viewportSize()?.width||0)<=767?'/shop/search':'/shop/');
   const search=page.getByRole('combobox',{name:'Поиск товаров'});
   await search.focus();
   await search.fill('молоко');
@@ -157,7 +157,7 @@ test('search suggestions and login dialog work from the keyboard',async({page})=
   await search.press('Escape');
   await expect(listbox).toBeHidden();
 
-  await page.goto('/profile');
+  await page.goto('/shop/profile');
   await page.getByRole('button',{name:'Войти по телефону'}).click();
   const dialog=page.getByRole('dialog',{name:'Рады вас видеть'});
   await expect(dialog).toBeVisible();
@@ -172,7 +172,7 @@ test('representative pages capture screenshots for manual review',async({page},t
   for(const [width,height,label] of widths){
     await page.setViewportSize({width,height});
     for(const [name,path] of routes){
-      await page.goto(path,{waitUntil:'networkidle'});
+      await page.goto('/shop' + path,{waitUntil:'networkidle'});
       // Baselines are not versioned in this repository. Capture evidence for manual review.
       await page.screenshot({path:testInfo.outputPath(`${label}-${name}.png`),fullPage:true,animations:'disabled'});
     }

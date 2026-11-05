@@ -10,7 +10,7 @@ export default defineConfig({
   ],
   webServer:[
     {command:'node tests/fixtures/api-server.cjs',url:'http://127.0.0.1:4010',reuseExistingServer:true},
-    {command:'npm start',url:'http://127.0.0.1:3011',reuseExistingServer:true,timeout:60_000,
-      env:{PORT:'3011',API_BASE_URL:'http://127.0.0.1:4010/api/v1',SESSION_ENCRYPTION_KEY:'0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',PUBLIC_ORIGIN:'http://127.0.0.1:3011',DEFAULT_STORE_ID:'2',CHECKOUT_ENABLED:'false'}},
+    {command:'npm start',url:'http://127.0.0.1:3011/shop/',reuseExistingServer:true,timeout:60_000,
+      env:{PORT:'3011',API_BASE_URL:'http://127.0.0.1:4010/api/v1',SESSION_ENCRYPTION_KEY:'0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',PUBLIC_ORIGIN:'http://127.0.0.1:3011',SECONDARY_PUBLIC_ORIGIN:'http://localhost:3011',DEFAULT_STORE_ID:'2',CHECKOUT_ENABLED:'false'}},
   ],
 });

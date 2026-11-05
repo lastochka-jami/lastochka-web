@@ -10,8 +10,8 @@ http.createServer((req,res) => {
   else if (u.pathname.includes('/products')) data = u.searchParams.has('query') ? Array.from({length:24},(_,i)=>({...product,id:10+i})) : [product];
   else if (u.pathname.endsWith('/search/suggestions')) data = [{id:10,title:product.title,type:'product'}];
   else if (u.pathname.endsWith('/banners')) data = [
-    {id:1,title:'Недоступная акция',image:{path:'/icon.png'},linkType:'product',linkProductId:3244},
-    {id:2,title:'Акция магазина',image:{path:'/icon.png'},linkType:'product',linkProductId:10},
+    {id:1,title:'Недоступная акция',image:{path:'/shop/brand-icon-192-v2.png'},linkType:'product',linkProductId:3244},
+    {id:2,title:'Акция магазина',image:{path:'/shop/brand-icon-192-v2.png'},linkType:'product',linkProductId:10},
   ];
   else if (u.pathname.endsWith('/stores/2')) data = {id:2,name:'Ласточка',address:'Тестовый магазин',isActive:true,isPickupEnabled:true};
   else if (u.pathname.endsWith('/stores')) data = [{id:2,name:'Ласточка',address:'Тестовый магазин',isActive:true,isPickupEnabled:true}];

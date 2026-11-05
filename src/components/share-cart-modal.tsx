@@ -28,7 +28,7 @@ export function ShareCartModal({ isOpen, onClose, items }: ShareCartModalProps) 
       typeof window !== 'undefined'
         ? window.location.origin
         : 'https://lastochki.store';
-    const link = `${origin}/share-cart#${pairs}`;
+    const link = `${origin}/shop/share-cart#${pairs}`;
 
     setShareLink(link);
 

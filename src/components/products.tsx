@@ -519,7 +519,7 @@ export function ProductDetail({ p: initial, stickyBuy = false }: { p: Product; s
             type="button"
             onClick={() =>
               s.run(async () => {
-                const url = location.origin + '/product/' + p.id;
+                const url = location.origin + '/shop/product/' + p.id;
                 if (navigator.share) {
                   await navigator.share({ title: p.title, url });
                 } else {

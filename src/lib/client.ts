@@ -1,6 +1,7 @@
 'use client';
 
 import { normalizePhone, normalizeOtp } from './phone-auth';
+import { appPath } from './app-path';
 import { unwrap } from './types';
 
 let cachedCsrfToken = '';
@@ -18,11 +19,11 @@ export interface BrowserSessionData {
 export function paymentReturnUrl(path: string, publicOrigin: string): string {
   const origin = new URL(publicOrigin);
   if (!/^https?:$/.test(origin.protocol)) throw new Error('Не настроен безопасный адрес возврата');
-  return new URL(path, `${origin.origin}/`).toString();
+  return new URL(appPath(path), `${origin.origin}/`).toString();
 }
 
 async function loadBrowserSession(): Promise<BrowserSessionData> {
-  const response = await fetch('/api/session', { cache: 'no-store' });
+  const response = await fetch(appPath('/api/session'), { cache: 'no-store' });
   const data = await response.json();
   if (!response.ok) throw new Error(data?.message || "Не удалось загрузить сессию");
   cachedCsrfToken = data.csrf;
@@ -64,7 +65,7 @@ async function sendRequest<T = any>(
       ...(method !== 'GET' ? { 'x-csrf-token': cachedCsrfToken } : {}),
       ...(options.idempotencyKey ? { 'Idempotency-Key': options.idempotencyKey } : {}),
     };
-    return fetch(url, {
+    return fetch(appPath(url), {
       method,
       cache: 'no-store',
       headers,

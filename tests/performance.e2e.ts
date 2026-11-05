@@ -16,7 +16,7 @@ test('cart mutation refreshes cart without refetching session', async ({ page })
   let writes = 0, carts = 0;
   await page.route('**/api/shop/cart?*', route => { carts++; return route.fulfill({ json: { data: { storeGroups: [] } } }); });
   await page.route('**/api/shop/cart/items', route => { writes++; return route.fulfill({ json: {} }); });
-  await page.goto('/product/10');
+  await page.goto('/shop/product/10');
   await expect.poll(sessions).toBe(1);
   await expect.poll(() => carts).toBe(1);
   await page.locator('.product-detail .detail-buy .add-button').click();
@@ -36,7 +36,7 @@ test('reviews keep loaded content throughout a failed background refresh', async
     await new Promise<void>(resolve => { release = resolve; });
     return route.fulfill({ status: 500, json: { message: 'Тестовая ошибка обновления' } });
   });
-  await page.goto('/product/10');
+  await page.goto('/shop/product/10');
   const review = page.getByText('Сохранённый отзыв');
   await expect(review).toBeVisible();
   await page.getByRole('button', { name: 'Оставить отзыв' }).click();
@@ -52,7 +52,7 @@ test('reviews keep loaded content throughout a failed background refresh', async
 test('slow recommendations do not block product content or move the reserved region', async ({ page }) => {
   await page.route('**/api/shop/products/31/reviews', route => route.fulfill({ json: { data: [] } }));
   await page.setExtraHTTPHeaders({ 'cache-control': 'no-cache' });
-  await page.goto('/product/31', { waitUntil: 'commit' });
+  await page.goto('/shop/product/31', { waitUntil: 'commit' });
   await expect(page.locator('.product-detail h1')).toBeVisible();
   const slot = page.locator('.product-recommendations-slot');
   await expect(page.getByText('Пока нет отзывов.', { exact: false })).toBeVisible();
@@ -64,7 +64,7 @@ test('slow recommendations do not block product content or move the reserved reg
 });
 
 test('streamed filters retain the selected catalog price', async ({ page }) => {
-  await page.goto('/search?query=food&priceMin=10');
+  await page.goto('/shop/search?query=food&priceMin=10');
   await expect(page.locator('.product-card').first()).toBeVisible();
   const filters = page.getByRole('button', { name: /Фильтры/ });
   await expect(filters).toBeEnabled();

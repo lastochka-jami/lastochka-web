@@ -652,7 +652,7 @@ function formatRub(v: unknown): string {
                 <p>Стоимость упаковки уточняется магазином.</p>
               </div>
               <div className="cart-packaging-image">
-                <img src="/images/swallow.webp" alt="Ласточка" width={68} height={54} />
+                <img src="/shop/images/swallow.webp" alt="Ласточка" width={68} height={54} />
               </div>
             </div>
 

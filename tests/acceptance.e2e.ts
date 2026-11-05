@@ -15,12 +15,12 @@ async function clickable(locator:Locator) {
 }
 
 test('banner boundary removes missing target while direct product keeps 404',async({page})=>{
-  await page.goto('/');
+  await page.goto('/shop/');
   await expect(page.locator('.home-banner:visible')).toHaveCount(1);
-  await expect(page.locator('a[href="/product/3244"]')).toHaveCount(0);
+  await expect(page.locator('a[href="/shop/product/3244"]')).toHaveCount(0);
   await page.locator('.home-banner:visible').click();
   await expect(page.locator('.product-detail h1:visible')).toContainText('Порция');
-  const response=await page.goto('/product/3244');
+  const response=await page.goto('/shop/product/3244');
   expect(response!.status()).toBe(404);
   await expect(page.getByText('Страница не найдена')).toBeVisible();
   await page.getByRole('link',{name:'В каталог'}).click();
@@ -28,7 +28,7 @@ test('banner boundary removes missing target while direct product keeps 404',asy
 });
 
 test('cart and search fresh navigation starts at top and back restores scroll',async({page})=>{
-  await page.goto('/search?query=салат');
+  await page.goto('/shop/search?query=салат');
   const result=page.locator('.product-card .product-title').last();
   await result.scrollIntoViewIfNeeded();
   const before=await page.evaluate(()=>scrollY);
@@ -39,7 +39,7 @@ test('cart and search fresh navigation starts at top and back restores scroll',a
   await page.goBack();
   await expect(page).toHaveURL(/\/search/);
   await expect.poll(()=>page.evaluate(()=>scrollY)).toBeGreaterThan(200);
-  await page.goto('/cart');
+  await page.goto('/shop/cart');
   await page.evaluate(()=>{document.querySelector('main')!.style.paddingTop='1200px';window.scrollTo(0,1000)});
   await page.getByRole('link',{name:'Перейти в каталог',exact:true}).first().click();
   await expect(page).toHaveURL(/\/catalog$/);
@@ -51,7 +51,7 @@ test('phone and OTP states work with mocked responses, short viewport and keyboa
   await page.route('**/api/shop/auth/phone-login',async r=>{sends++;await new Promise(resolve=>setTimeout(resolve,100));await r.fulfill({json:{data:{codeLength:6}}});});
   await page.route('**/api/shop/auth/phone-confirm',r=>r.fulfill({status:422,json:{message:'Неверный тестовый код'}}));
   await page.setViewportSize({width:390,height:420});
-  await page.goto('/profile');
+  await page.goto('/shop/profile');
   const trigger=page.getByRole('button',{name:'Войти по телефону'});
   await trigger.click();
   const dialog=page.getByRole('dialog');
@@ -83,7 +83,7 @@ test('phone and OTP states work with mocked responses, short viewport and keyboa
 
 test('mobile counters fit cards and desktop preview remains inside short viewport',async({page})=>{
   await page.setViewportSize({width:320,height:568});
-  await page.goto('/search?query=салат');
+  await page.goto('/shop/search?query=салат');
   const card=page.locator('.product-card').first();
   await card.locator('.pill-buy-btn').click();
   const counter=card.locator('.pill-counter');
@@ -95,7 +95,7 @@ test('mobile counters fit cards and desktop preview remains inside short viewpor
   });
   for(const box of boxes){expect(box.left).toBeGreaterThanOrEqual(-1);expect(box.right).toBeLessThanOrEqual(1);expect(box.top).toBeGreaterThanOrEqual(-1);expect(box.bottom).toBeLessThanOrEqual(1);}
   await page.setViewportSize({width:1024,height:450});
-  await page.goto('/');
+  await page.goto('/shop/');
   await page.locator('.cart-button').hover();
   const preview=page.locator('.cart-preview-popover');
   await expect(preview).toBeVisible();
@@ -112,7 +112,7 @@ test('cold home inserts secondary content below the settled first screen without
     (window as any).homeCls=0;
     new PerformanceObserver(list=>{for(const entry of list.getEntries() as any)if(!entry.hadRecentInput)(window as any).homeCls+=entry.value;}).observe({type:'layout-shift',buffered:true});
   });
-  await page.goto('/');
+  await page.goto('/shop/');
   await page.waitForLoadState('networkidle');
   await expect(page.locator('.home-banner:visible')).toHaveCount(1);
   expect(await page.evaluate(()=>(window as any).homeCls)).toBeLessThan(0.1);

@@ -11,7 +11,7 @@ export const cookieOptions = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
   sameSite: 'lax' as const,
-  path: '/',
+  path: '/shop',
   maxAge: 60 * 60 * 24 * 14,
 };
 
