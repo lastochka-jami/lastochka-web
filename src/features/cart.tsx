@@ -611,6 +611,15 @@ function formatRub(v: unknown): string {
                                 <Plus size={13} />
                               </button>
                             </div>
+                            <button
+                              type="button"
+                              className="cart-item-remove"
+                              aria-label={`Удалить ${normalized.title} из корзины`}
+                              onClick={() => s.setQuantity(i.id, 0)}
+                            >
+                              <Trash2 size={16} aria-hidden="true" />
+                              Удалить
+                            </button>
                           </div>
                         </article>
                       );

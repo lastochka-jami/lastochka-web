@@ -1882,6 +1882,28 @@ main.container:has(.catalog-hint-section) { padding-bottom: 36px; }
   color: var(--ink);
   white-space: nowrap;
 }
+.cart-item-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--brand, #e20a25);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.cart-item-remove:hover {
+  background: #fff5f5;
+}
+.cart-item-remove:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
 .cart-item-stepper {
   display: inline-flex;
   align-items: center;
