@@ -55,3 +55,15 @@ test('photo candidates normalize invalid sources and retain fallback order witho
   ]), ['https://example.test/first.webp', '/images/fallback.webp', 'https://example.test/last.webp']);
   assert.deepEqual(imageCandidates(undefined), []);
 });
+
+test('thumbnail normalization preserves gallery originals and rejects invalid thumbnails', async () => {
+  const { product, categoryMedia } = await import('../src/lib/types');
+  const path = 'https://example.test/original.jpg';
+  const thumbPath = 'https://example.test/thumb.jpg';
+  const p = product({ id: 1, images: [{ path, thumbPath }] });
+  assert.equal(p.preview, thumbPath);
+  assert.equal(p.images[0].path, path);
+  assert.equal(p.images[0].thumbPath, thumbPath);
+  assert.equal(product({ id: 1, images: [{ path, thumbPath: 'javascript:bad' }] }).preview, path);
+  assert.equal(categoryMedia({ image: { path, thumbPath } }).foreground, thumbPath);
+});

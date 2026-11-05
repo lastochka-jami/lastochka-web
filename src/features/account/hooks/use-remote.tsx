@@ -39,12 +39,12 @@ export function useRemote<T = any>(path: string | null): RemoteStateResult<T> {
       }
     } catch (e: any) {
       if (requestId.current === id) {
-        setState({
+        setState((current) => ({
           path,
-          data: undefined,
+          data: e?.status !== 401 && current.path === path ? current.data : undefined,
           error: e instanceof Error ? e.message : 'Не удалось загрузить данные',
           loading: false,
-        });
+        }));
       }
     }
   }, [path]);
@@ -77,11 +77,12 @@ export function RemoteState<T = any>({
   r: RemoteStateResult<T>;
   children: ReactNode;
 }) {
-  if (r.loading) {
+  if (r.loading && r.data === undefined) {
     return <p className="muted">Загружаем…</p>;
   }
-  if (r.error) {
-    return <ErrorMessage message={r.error} retry={r.reload} />;
-  }
-  return <>{children}</>;
+  if (r.error && r.data === undefined) return <ErrorMessage message={r.error} retry={r.reload} />;
+  return <>
+    {r.error && <ErrorMessage message={r.error} retry={r.reload} />}
+    {children}
+  </>;
 }

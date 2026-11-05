@@ -18,6 +18,7 @@ export interface ApiResponse<T = unknown> {
 export interface Media {
   id?: number;
   path: string;
+  thumbPath?: string;
 }
 
 export interface Category {
@@ -372,6 +373,7 @@ export function normalizeMedia(v: any): Media[] {
         ? { id: Number((raw as any).id) }
         : {}),
       path,
+      ...(validUrl((raw as any)?.thumbPath) ? { thumbPath: (raw as any).thumbPath } : {}),
     });
   }
 
@@ -383,8 +385,8 @@ export function categoryMedia(v: Partial<Category> | any): {
   background: string | null;
 } {
   return {
-    foreground: validUrl(v?.image?.path) ? v.image.path : null,
-    background: validUrl(v?.backgroundImage?.path) ? v.backgroundImage.path : null,
+    foreground: validUrl(v?.image?.thumbPath) ? v.image.thumbPath : validUrl(v?.image?.path) ? v.image.path : null,
+    background: validUrl(v?.backgroundImage?.thumbPath) ? v.backgroundImage.thumbPath : validUrl(v?.backgroundImage?.path) ? v.backgroundImage.path : null,
   };
 }
 
@@ -440,7 +442,7 @@ export function product(v: any): Product {
     measurementUnit: v.measurementUnit || 'piece',
     measurementUnitLabel: v.measurementUnitLabel || 'шт',
     images,
-    preview: images[0]?.path || null,
+    preview: images[0]?.thumbPath || images[0]?.path || null,
     supplements: Array.isArray(v.supplements) ? v.supplements : [],
     variants: Array.isArray(v.variants) ? v.variants : [],
     isFavorite: truth(v.isFavorite),

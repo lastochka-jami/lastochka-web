@@ -20,5 +20,5 @@ http.createServer((req,res) => {
   else if (/\/product-groups\/[^/]+$/.test(u.pathname)) data = group;
   else if (u.pathname.includes('/product-groups')) data = [group];
   else if (u.pathname.endsWith('/app-settings')) data = {checkoutWithoutSlots:false};
-  setTimeout(() => {res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify({data,hasMore:false}));},100);
+  setTimeout(() => {res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify({data,hasMore:false}));}, /\/products\/31\/(similar|related)$/.test(u.pathname) ? 800 : 100);
 }).listen(4010,'127.0.0.1');

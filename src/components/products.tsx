@@ -504,7 +504,7 @@ export function ProductDetail({ p: initial, stickyBuy = false }: { p: Product; s
                 aria-pressed={i === imageIndex}
                 type="button"
               >
-                <Photo src={im.path} alt="" width={72} height={72} sizes="72px" />
+                <Photo src={im.thumbPath || im.path} alt="" width={72} height={72} sizes="72px" />
               </button>
             ))}
           </div>

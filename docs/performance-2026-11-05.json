@@ -1,0 +1,89 @@
+{
+  "date": "2026-11-05",
+  "environment": {
+    "server": "Next.js dev, warm route; local deterministic Laravel API fixture",
+    "url": "http://127.0.0.1:3011/product/31",
+    "detail_delay_ms": 100,
+    "recommendation_delay_ms": 800,
+    "cache": "cache-control: no-cache on every request",
+    "samples": 5,
+    "warmup_requests_excluded": 1,
+    "baseline_page_source": "9e433d2",
+    "scope": "SSR arrival of product detail HTML, not browser LCP or production latency"
+  },
+  "before": [
+    {
+      "mainMs": 856,
+      "completeMs": 858
+    },
+    {
+      "mainMs": 845,
+      "completeMs": 846
+    },
+    {
+      "mainMs": 854,
+      "completeMs": 855
+    },
+    {
+      "mainMs": 853,
+      "completeMs": 854
+    },
+    {
+      "mainMs": 853,
+      "completeMs": 854
+    }
+  ],
+  "after": [
+    {
+      "mainMs": 159,
+      "completeMs": 850
+    },
+    {
+      "mainMs": 164,
+      "completeMs": 856
+    },
+    {
+      "mainMs": 153,
+      "completeMs": 848
+    },
+    {
+      "mainMs": 158,
+      "completeMs": 855
+    },
+    {
+      "mainMs": 152,
+      "completeMs": 851
+    }
+  ],
+  "median_ms": {
+    "mainMs": {
+      "before": 853,
+      "after": 158
+    },
+    "completeMs": {
+      "before": 854,
+      "after": 851
+    }
+  },
+  "checks": {
+    "home_cls_before": 0,
+    "home_cls_after": 0,
+    "cart_mutation_requests": {
+      "before": [
+        "POST cart/items",
+        "GET session",
+        "GET cart"
+      ],
+      "after": [
+        "POST cart/items",
+        "GET cart"
+      ]
+    },
+    "privacy": "Only concurrent browser reads are shared; settled personal responses are not cached."
+  },
+  "limitations": [
+    "No production or real network measurements.",
+    "The fixture has no thumbnail images, so no real image byte reduction is claimed.",
+    "Recommendation regions reserve fixed space and scroll when needed to prevent shifts."
+  ]
+}

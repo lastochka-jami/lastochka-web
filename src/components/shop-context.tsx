@@ -62,14 +62,16 @@ export function ShopProvider({ children }: { children: ReactNode }) {
   const [publicOrigin, setPublicOrigin] = useState('');
   const [storeId, setStoreId] = useState(2);
 
-  const refresh = useCallback(async () => {
+  const knownSession = useRef<Awaited<ReturnType<typeof browserSession>> | null>(null);
+  const refresh = useCallback(async (reloadSession = true) => {
     const version = ++refreshVersion.current;
     const selection = readLocation();
     setLocationMode(selection.mode);
     setCartError('');
     try {
-      const sessionData = await browserSession();
+      const sessionData = !reloadSession && knownSession.current ? knownSession.current : await browserSession();
       if (version !== refreshVersion.current) return;
+      knownSession.current = sessionData;
       setAuth(sessionData.authenticated);
       setStoreId(sessionData.storeId);
       setCheckout(sessionData.checkoutEnabled);
@@ -160,7 +162,7 @@ export function ShopProvider({ children }: { children: ReactNode }) {
           storeId: p.storeId || storeId,
           supplements,
         });
-      await refresh();
+      await refresh(false);
       notice('Товар добавлен в корзину');
     });
   }
@@ -174,7 +176,7 @@ export function ShopProvider({ children }: { children: ReactNode }) {
 
     await run(async () => {
       await request(`cart/items/${id}`, n > 0 ? 'PUT' : 'DELETE', n > 0 ? { quantity: n } : undefined);
-      await refresh();
+      await refresh(false);
     });
   }
 

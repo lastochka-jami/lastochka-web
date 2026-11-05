@@ -5254,3 +5254,7 @@ button, [role="button"], input, select { min-height: var(--control-size); }
   .cart-item-middle { grid-column: 2; }
   .cart-item-right { min-width: 0; grid-column: 2; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 }
+
+/* Fixed streaming slots keep content below late recommendations stationary. */
+.home-collections-slot { block-size: 360px; overflow: auto; }
+.product-recommendations-slot { block-size: 620px; overflow: auto; }

@@ -4,6 +4,8 @@ import { normalizePhone, normalizeOtp } from './phone-auth';
 import { unwrap } from './types';
 
 let cachedCsrfToken = '';
+let pendingSession: Promise<BrowserSessionData> | undefined;
+const pendingGets = new Map<string, Promise<any>>();
 
 export interface BrowserSessionData {
   authenticated: boolean;
@@ -19,12 +21,19 @@ export function paymentReturnUrl(path: string, publicOrigin: string): string {
   return new URL(path, `${origin.origin}/`).toString();
 }
 
-export async function browserSession(): Promise<BrowserSessionData> {
+async function loadBrowserSession(): Promise<BrowserSessionData> {
   const response = await fetch('/api/session', { cache: 'no-store' });
   const data = await response.json();
   if (!response.ok) throw new Error(data?.message || "Не удалось загрузить сессию");
   cachedCsrfToken = data.csrf;
   return data;
+}
+
+export function browserSession(): Promise<BrowserSessionData> {
+  if (!pendingSession) {
+    pendingSession = loadBrowserSession().finally(() => { pendingSession = undefined; });
+  }
+  return pendingSession;
 }
 
 export async function requestPhoneCode(input: string): Promise<{ phone: string; codeLength: number }> {
@@ -38,7 +47,7 @@ export async function confirmPhoneCode(phone: string, code: string, length: numb
   await request('auth/phone-confirm', 'POST', { phone: normalizePhone(phone), code: normalizeOtp(code, length) });
 }
 
-export async function request<T = any>(
+async function sendRequest<T = any>(
   path: string,
   method = 'GET',
   body?: unknown,
@@ -92,4 +101,25 @@ export async function request<T = any>(
   }
 
   return data as T;
+}
+
+// Share only in-flight browser reads, never settled or server-wide personal data.
+export function request<T = any>(
+  path: string,
+  method = 'GET',
+  body?: unknown,
+  options: { idempotencyKey?: string } = {},
+): Promise<T> {
+  if (method !== 'GET') {
+    pendingGets.clear();
+    return sendRequest<T>(path, method, body, options).finally(() => pendingGets.clear());
+  }
+  const key = path.startsWith('/api/') ? path : `/api/shop/${path}`;
+  const existing = pendingGets.get(key);
+  if (existing) return existing;
+  const pending = sendRequest<T>(path, method, body, options).finally(() => {
+    if (pendingGets.get(key) === pending) pendingGets.delete(key);
+  });
+  pendingGets.set(key, pending);
+  return pending;
 }

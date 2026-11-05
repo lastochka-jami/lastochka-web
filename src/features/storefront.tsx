@@ -29,8 +29,8 @@ export { getCategoryGroupColor };
 type StorefrontStoryDto = {
   id: number;
   title: string;
-  thumbnailImage?: { path: string } | null;
-  images?: Array<{ path: string; type?: string; mimeType?: string }>;
+  thumbnailImage?: { path: string; thumbPath?: string } | null;
+  images?: Array<{ path: string; thumbPath?: string; type?: string; mimeType?: string }>;
 };
 
 export function SectionHeading({
@@ -65,7 +65,7 @@ async function HomeStories() {
       {stories.map((story) => (
         <Link href={'/stories/' + story.id} key={story.id}>
           <Photo
-            src={story.thumbnailImage?.path || story.images?.[0]?.path}
+            src={story.thumbnailImage?.thumbPath || story.thumbnailImage?.path || story.images?.[0]?.thumbPath || story.images?.[0]?.path}
             alt={story.title}
             width={82}
             height={82}
@@ -145,7 +145,7 @@ async function HomeCollections({ groups }: { groups: Promise<ProductGroupDto[]> 
       <div className="collections">
         {recommended.map((group, index) => (
           <Link key={group.id} href={'/collection/' + group.slug} className={`collection-tile tone-${index % 5}`}>
-            <Photo src={group.image?.path} alt="" sizes="(max-width: 767px) calc((100vw - 38px) / 2), (max-width: 1023px) calc((100vw - 68px) / 3), 220px" />
+            <Photo src={group.image?.thumbPath || group.image?.path} alt="" sizes="(max-width: 767px) calc((100vw - 38px) / 2), (max-width: 1023px) calc((100vw - 68px) / 3), 220px" />
             <strong>{group.title}</strong>
             <span className="tile-arrow"><ArrowRight size={18} /></span>
           </Link>
@@ -173,14 +173,11 @@ async function HomeFeatured({ store, groups }: { store: number; groups: Promise<
 
 export async function Home() {
   const store = await selectedStore();
-  // Settle the above-fold structure together: streaming an empty slot before it
-  // inserts late sections and shifts content that the customer is already reading.
-  const [groupItems, categoryItems] = await Promise.all([
-    publicApi(`stores/${store}/product-groups`).then(list<ProductGroupDto>).catch(() => []),
-    publicApi(`stores/${store}/categories?includeChildren=true&perPage=100`).then(list<HomeCategory>).catch(() => []),
-  ]);
-  const groups = Promise.resolve(groupItems);
-  const categories = Promise.resolve(categoryItems);
+  const groups = publicApi(`stores/${store}/product-groups`).then(list<ProductGroupDto>).catch(() => []);
+  const categories = publicApi(`stores/${store}/categories?includeChildren=true&includeProducts=false&perPage=100`)
+    .then(list<HomeCategory>).catch(() => []);
+  // Categories define the primary layout; recommendations stream in a reserved slot.
+  await categories;
 
   return (
     <>
@@ -197,7 +194,7 @@ export async function Home() {
       </section>
       <div className="home-sheet">
         <HomeCategories categories={categories} />
-        <HomeCollections groups={groups} />
+        <div className="home-collections-slot" role="region" aria-label="Подборки товаров" tabIndex={0}><Suspense fallback={null}><HomeCollections groups={groups} /></Suspense></div>
         <section className="catalog-hint-section">
           <div className="catalog-hint-card">
             <div className="catalog-hint-info">
@@ -358,7 +355,7 @@ export async function Catalog({
   let title = 'Каталог';
   let data: any = { data: [] };
   let children: Category[] = [];
-  let filters: any = null;
+  let filters: Promise<any> = Promise.resolve(null);
   let path: Category[] = [];
   let activeChild: Category | null = null;
 
@@ -369,7 +366,7 @@ export async function Catalog({
   const categories = needsCategoryTree || needsSearchCategories
     ? list<HomeCategory>(
         await publicApi(
-          `stores/${store}/categories${needsCategoryTree ? '?includeChildren=true&perPage=100' : ''}`,
+          `stores/${store}/categories${needsCategoryTree ? '?includeChildren=true&includeProducts=false&perPage=100' : '?includeProducts=false'}`,
         ),
       )
     : [];
@@ -405,10 +402,9 @@ export async function Catalog({
         </>
       );
     }
-    [data, filters] = await Promise.all([
-      api(`search/stores/${store}/products?${q}`),
-      api(`search/stores/${store}/filters?${q}`),
-    ]);
+    const productsRequest = api(`search/stores/${store}/products?${q}`);
+    filters = api(`search/stores/${store}/filters?${q}`).catch(() => null);
+    data = await productsRequest;
   } else if (kind === 'collection') {
     data = await api(
       `stores/${store}/product-groups/slug/${encodeURIComponent(id || '')}/products?${q}`,
@@ -437,10 +433,9 @@ export async function Catalog({
     // Always fetch products! If subcategory is active, fetch its products; otherwise current category
     const targetCategoryId = activeChild ? activeChild.id : current.id;
 
-    [data, filters] = await Promise.all([
-      api(`stores/${store}/categories/${targetCategoryId}/products?${q}`),
-      publicApi(`stores/${store}/categories/${targetCategoryId}/filters`),
-    ]);
+    const productsRequest = api(`stores/${store}/categories/${targetCategoryId}/products?${q}`);
+    filters = publicApi(`stores/${store}/categories/${targetCategoryId}/filters`).catch(() => null);
+    data = await productsRequest;
   }
 
   const products = list(data).map(product);
@@ -480,7 +475,7 @@ export async function Catalog({
           {typeof data.total === 'number' && (
             <span className="muted total-count-badge">{data.total.toLocaleString('ru-RU')} товаров</span>
           )}
-          <Filters filters={unwrap(filters)} />
+          <Suspense fallback={<Filters loading />}><CatalogFilters filters={filters} /></Suspense>
         </div>
       </div>
 
@@ -572,18 +567,16 @@ export async function Catalog({
   );
 }
 
+async function CatalogFilters({ filters }: { filters: Promise<any> }) {
+  return <Filters filters={unwrap(await filters)} />;
+}
+
 export async function ProductPage({ id }: { id: string }) {
   const store = await selectedStore();
-  const [detailData, similar, relatedGroups] = await Promise.all([
-    api(`products/${encodeURIComponent(id)}?storeId=${store}`),
-    publicApi(`products/${id}/similar?storeId=${store}&perPage=6`).then(list).catch(() => []),
-    publicApi(`products/${id}/related?storeId=${store}&perPage=6`).then(list).catch(() => []),
-  ]);
-  const p = product(unwrap(detailData));
-
-  const related = relatedGroups
-    .flatMap((group) => (Array.isArray(group.products) ? group.products : [group]))
-    .filter((v) => v?.title && v?.price != null);
+  const detail = api(`products/${encodeURIComponent(id)}?storeId=${store}`);
+  const similar = publicApi(`products/${encodeURIComponent(id)}/similar?storeId=${store}&perPage=6`).then(list).catch(() => []);
+  const related = publicApi(`products/${encodeURIComponent(id)}/related?storeId=${store}&perPage=6`).then(list).catch(() => []);
+  const p = product(unwrap(await detail));
 
   return (
     <>
@@ -606,19 +599,28 @@ export async function ProductPage({ id }: { id: string }) {
       <ProductDetail p={p} stickyBuy />
       <Reviews productId={p.id} />
 
-      {similar.length > 0 && (
-        <section>
-          <SectionHeading title="Вам может понравиться" />
-          <ProductGrid products={similar.slice(0, 6).map(product)} />
-        </section>
-      )}
-
-      {related.length > 0 && (
-        <section>
-          <SectionHeading title="Хорошо сочетается" />
-          <ProductGrid products={related.slice(0, 6).map(product)} />
-        </section>
-      )}
+      <div className="product-recommendations-slot" role="region" aria-label="Рекомендации товаров" tabIndex={0}>
+        <Suspense fallback={null}>
+          <ProductRecommendations similar={similar} relatedGroups={related} />
+        </Suspense>
+      </div>
     </>
   );
+}
+
+async function ProductRecommendations({ similar, relatedGroups }: { similar: Promise<any[]>; relatedGroups: Promise<any[]> }) {
+  const [similarItems, groups] = await Promise.all([similar, relatedGroups]);
+  const related = groups
+    .flatMap((group) => (Array.isArray(group.products) ? group.products : [group]))
+    .filter((v) => v?.title && v?.price != null);
+  return <>
+    {similarItems.length > 0 && <section>
+      <SectionHeading title="Вам может понравиться" />
+      <ProductGrid products={similarItems.slice(0, 6).map(product)} />
+    </section>}
+    {related.length > 0 && <section>
+      <SectionHeading title="Хорошо сочетается" />
+      <ProductGrid products={related.slice(0, 6).map(product)} />
+    </section>}
+  </>;
 }

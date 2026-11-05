@@ -57,8 +57,10 @@ const SORT_OPTIONS = [
 export function Filters({
   filters,
   subcategories,
+  loading = false,
 }: {
   filters?: any;
+  loading?: boolean;
   subcategories?: SubcategoriesNavProps;
 }) {
   const [open, setOpen] = useState(false);
@@ -133,6 +135,8 @@ export function Filters({
         className={`filter-trigger-btn ${activeCount > 0 ? 'has-active' : ''}`}
         onClick={() => setOpen(true)}
         type="button"
+        disabled={loading}
+        aria-busy={loading}
         aria-haspopup="dialog"
         aria-expanded={open}
       >
