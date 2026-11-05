@@ -166,7 +166,7 @@ async function HomeFeatured({ store, groups }: { store: number; groups: Promise<
   return (
     <section>
       <SectionHeading title={featured.title} href={'/collection/' + featured.slug} subtitle="Приготовлено с заботой" />
-      <ProductCarousel products={products} />
+      <ProductCarousel products={products.slice(0, 8)} />
     </section>
   );
 }
@@ -194,7 +194,7 @@ export async function Home() {
       </section>
       <div className="home-sheet">
         <HomeCategories categories={categories} />
-        <div className="home-collections-slot" role="region" aria-label="Подборки товаров" tabIndex={0}><Suspense fallback={null}><HomeCollections groups={groups} /></Suspense></div>
+        <div className="home-collections-slot" role="region" aria-label="Подборки товаров"><Suspense fallback={null}><HomeCollections groups={groups} /></Suspense></div>
         <section className="catalog-hint-section">
           <div className="catalog-hint-card">
             <div className="catalog-hint-info">
@@ -599,7 +599,7 @@ export async function ProductPage({ id }: { id: string }) {
       <ProductDetail p={p} stickyBuy />
       <Reviews productId={p.id} />
 
-      <div className="product-recommendations-slot" role="region" aria-label="Рекомендации товаров" tabIndex={0}>
+      <div className="product-recommendations-slot" role="region" aria-label="Рекомендации товаров">
         <Suspense fallback={null}>
           <ProductRecommendations similar={similar} relatedGroups={related} />
         </Suspense>

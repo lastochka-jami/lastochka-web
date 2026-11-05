@@ -9,8 +9,6 @@ import {
   Maximize2,
   Share2,
   ArrowUpRight,
-  ChevronLeft,
-  ChevronRight,
   ArrowRight,
   Clock,
 } from 'lucide-react';
@@ -38,7 +36,7 @@ export function ProductGrid({ products, imageSizes }: { products: Product[]; ima
   );
 }
 
-export function ProductCard({ p, imageSizes = '(max-width: 767px) calc((100vw - 76px) / 2), (max-width: 1023px) calc((100vw - 150px) / 3), (max-width: 1399px) calc((100vw - 166px) / 3), 295px' }: { p: Product; imageSizes?: string }) {
+export function ProductCard({ p, imageSizes = '(max-width: 767px) calc((100vw - 60px) / 2), 220px' }: { p: Product; imageSizes?: string }) {
   const [quick, setQuick] = useState(false);
 
   const weightOrUnit =
@@ -181,37 +179,9 @@ export function ProductCarousel({
   href?: string;
   subtitle?: string;
 }) {
-  const trackRef = useRef<HTMLDivElement>(null);
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(true);
-
-  const checkScroll = () => {
-    if (!trackRef.current) return;
-    const { scrollLeft, scrollWidth, clientWidth } = trackRef.current;
-    setCanScrollLeft(scrollLeft > 8);
-    setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 8);
-  };
-
-  useEffect(() => {
-    checkScroll();
-    const el = trackRef.current;
-    if (!el) return;
-    el.addEventListener('scroll', checkScroll, { passive: true });
-    window.addEventListener('resize', checkScroll);
-    return () => {
-      el.removeEventListener('scroll', checkScroll);
-      window.removeEventListener('resize', checkScroll);
-    };
-  }, [products]);
-
-  const scroll = (direction: 'left' | 'right') => {
-    if (!trackRef.current) return;
-    const offset = direction === 'left' ? -320 : 320;
-    trackRef.current.scrollBy({ left: offset, behavior: 'smooth' });
-  };
-
   if (!products.length) return null;
-
+  // Only limit previews when the complete collection has a destination.
+  const preview = href ? products.slice(0, 8) : products;
   return (
     <div className="product-carousel-wrapper">
       {(title || href) && (
@@ -220,42 +190,10 @@ export function ProductCarousel({
             {subtitle && <p className="eyebrow">{subtitle}</p>}
             {title && <h2>{title}</h2>}
           </div>
-          <div className="carousel-nav-actions">
-            {href && (
-              <Link href={href} className="carousel-see-all">
-                Смотреть всё <ArrowRight size={18} />
-              </Link>
-            )}
-            <div className="carousel-arrows">
-              <button
-                type="button"
-                className="carousel-arrow"
-                onClick={() => scroll('left')}
-                disabled={!canScrollLeft}
-                aria-label="Прокрутить назад"
-              >
-                <ChevronLeft size={20} />
-              </button>
-              <button
-                type="button"
-                className="carousel-arrow"
-                onClick={() => scroll('right')}
-                disabled={!canScrollRight}
-                aria-label="Прокрутить вперед"
-              >
-                <ChevronRight size={20} />
-              </button>
-            </div>
-          </div>
+          {href && <Link href={href} className="carousel-see-all">Смотреть всё <ArrowRight size={18} /></Link>}
         </div>
       )}
-      <div className="product-carousel-track" ref={trackRef}>
-        {products.map((p) => (
-          <div className="product-carousel-item" key={p.id}>
-            <ProductCard p={p} imageSizes="(max-width: 767px) calc((100vw - 84px) / 2), (max-width: 1023px) calc((100vw - 150px) / 3), (max-width: 1399px) calc((100vw - 212px) / 4), 295px" />
-          </div>
-        ))}
-      </div>
+      <ProductGrid products={preview} />
     </div>
   );
 }

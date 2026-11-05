@@ -32,7 +32,7 @@ export function HomeBrandLink({
     >
       <img
         className="brand-mark"
-        src="/shop/images/brand-icon-v2.webp"
+        src="/shop/icon.svg"
         alt=""
         width={imageSize}
         height={imageSize}
