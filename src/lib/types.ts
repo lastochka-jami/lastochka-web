@@ -225,6 +225,8 @@ export interface PaymentCardDto {
 }
 
 export interface NotificationDto {
+  shortDescription?: string | null;
+  imageUrl?: string | null;
   id: number;
   title: string;
   body?: string;

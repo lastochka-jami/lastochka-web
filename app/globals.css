@@ -5315,3 +5315,28 @@ button, [role="button"], input, select { min-height: var(--control-size); }
   .header .search-box input, .modal input, .modal select, .modal textarea { font-size: 16px; }
   .footer { display: none; }
 }
+
+/* Notifications use real preview/image fields; editor metadata never reaches the UI. */
+.notifications-list { display: grid; gap: 0; }
+.notification-day { margin: 24px 0 12px; font-size: 15px; font-weight: 500; }
+.notification-item { width: 100%; display: flex; align-items: flex-start; gap: 10px; padding: 16px; text-align: left; border: 0; background: #f2f2f2; box-shadow: none; border-radius: 18px; }
+.notif-unread-dot { width: 8px; height: 8px; flex: 0 0 8px; margin-top: 7px; border-radius: 50%; background: transparent; }
+.unread .notif-unread-dot { background: #f7aaa7; }
+.notif-image { width: 48px; height: 56px; flex: 0 0 48px; display: grid; place-items: center; overflow: hidden; border-radius: 10px; color: var(--muted); }
+.notif-image img { width: 100%; height: 100%; object-fit: cover; }
+.notif-content { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 3px; color: #555; }
+.notif-content strong { font-size: 16px; line-height: 1.2; overflow-wrap: anywhere; }
+.notif-preview { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: 14px; line-height: 1.3; overflow-wrap: anywhere; }
+.notif-view { font-size: 14px; }
+.notif-time { flex-shrink: 0; color: #888; font-size: 12px; line-height: 20px; }
+.notification-detail-text { white-space: pre-line; overflow-wrap: anywhere; }
+.notification-detail-image { width: 100%; max-height: 320px; object-fit: contain; border-radius: 12px; }
+@media (max-width: 767px) {
+  .notifications-page .section-header { margin: 0; align-items: flex-end; }
+  .notifications-page .section-header > div { display: none; }
+  .notifications-read-all { min-height: 44px; font-size: 13px; padding: 8px 12px; }
+  .notification-item { gap: 8px; padding: 12px 10px; }
+  .notif-content strong { font-size: 15px; }
+  .notif-image { width: 44px; flex-basis: 44px; height: 48px; }
+  .notif-time { font-size: 11px; }
+}
