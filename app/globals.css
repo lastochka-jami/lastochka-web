@@ -5262,3 +5262,56 @@ button, [role="button"], input, select { min-height: var(--control-size); }
 
 /* Streamed sections participate in normal document flow. */
 .home-collections-slot, .product-recommendations-slot { min-width: 0; }
+
+/* Mobile screenshot audit, 2026-11-05. Desktop rules remain unchanged. */
+@media (max-width: 767px) {
+  :root { --mobile-dock-height: 0px; }
+  body:has(.float-actions) { --mobile-dock-height: 64px; }
+  html { scroll-padding-bottom: calc(var(--bottom-nav-height) + var(--safe-bottom) + 80px); }
+  main.container {
+    padding-bottom: calc(var(--bottom-nav-height) + var(--safe-bottom) + var(--mobile-dock-height) + 24px);
+  }
+  main :is(button, a, input, select, textarea) {
+    scroll-margin-block: 120px calc(var(--bottom-nav-height) + var(--safe-bottom) + 84px);
+  }
+  .bottom-nav { height: calc(var(--bottom-nav-height) + var(--safe-bottom)); background: #fff; }
+  .bottom-nav a { font-size: 11px; min-height: 44px; }
+  .float-actions {
+    left: 0; right: 0;
+    bottom: calc(var(--bottom-nav-height) + var(--safe-bottom));
+    height: 64px; padding: 8px var(--gutter);
+    background: #fff; border-top: 1px solid var(--line);
+    pointer-events: auto;
+  }
+  .float-cart-btn { width: 100%; justify-content: center; box-shadow: none; }
+  body:has(.float-actions) .footer { padding-bottom: calc(var(--bottom-nav-height) + var(--safe-bottom) + 88px); }
+  .header-on-profile .mobile-app-bar { display: none; }
+  .profile-mobile-header { margin: 4px 0 16px; }
+  .native-profile-card { background: #f6f6f6; border: 0; box-shadow: none; }
+  .native-phone-info, .native-bar-left-link { min-width: 0; }
+  .native-phone-number, .native-bar-title { overflow-wrap: anywhere; }
+  .native-bar-left-link { padding-right: 8px; }
+  .native-bar-left-link svg { flex-shrink: 0; }
+  .native-action-bar-row { gap: 8px; }
+  .section-heading { flex-wrap: wrap; gap: 4px 12px; }
+  .section-heading h2 { font-size: 22px; font-weight: 750; line-height: 1.15; overflow-wrap: anywhere; }
+  .section-heading > a { font-size: 13px; min-height: 44px; margin-left: auto; }
+  .category-tile-image-wrapper { width: 78% !important; height: 68% !important; right: 0 !important; bottom: 0 !important; }
+  .category-tile-title, .category-tile strong { -webkit-line-clamp: 3 !important; line-clamp: 3 !important; }
+  .category-tile { isolation: isolate; }
+  .category-tile-title { position: relative; z-index: 1; }
+  .product-card { padding: 0; border: 0; background: transparent; box-shadow: none; }
+  .product-card:hover { transform: none; box-shadow: none; }
+  .product-photo { border-radius: 18px; }
+  .product-photo .favorite { width: 44px; height: 44px; top: 4px; right: 4px; box-shadow: none; }
+  .product-title { font-size: 14px; font-weight: 500; line-height: 1.3; min-height: 0; }
+  .product-info { min-height: 76px; flex: 1; gap: 4px; margin-bottom: 10px; }
+  .product-bottom { flex-direction: column; align-items: flex-start; }
+  .product-card-old-price { font-size: 12px; }
+  .product-bottom .pill-buy-btn { width: auto; max-width: 100%; min-width: 110px; gap: 12px; padding-inline: 12px; }
+  .product-bottom .pill-counter { width: 100%; }
+  .product-weight { font-size: 12px; }
+  .discount { top: auto; bottom: 8px; background: #444; }
+  .header .search-box input, .modal input, .modal select, .modal textarea { font-size: 16px; }
+  .footer { display: none; }
+}

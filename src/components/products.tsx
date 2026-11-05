@@ -107,8 +107,11 @@ export function PillBuy({
 
   async function run(f: () => Promise<void>) {
     setBusy(true);
-    await f();
-    setBusy(false);
+    try {
+      await f();
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (p.stockQuantity <= 0) {
@@ -272,8 +275,11 @@ export function Buy({
 
   async function run(f: () => Promise<void>) {
     setBusy(true);
-    await f();
-    setBusy(false);
+    try {
+      await f();
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (p.stockQuantity <= 0) {
@@ -338,8 +344,11 @@ export function CartQuantity({
 
   async function change(next: number) {
     setBusy(true);
-    await s.setQuantity(itemId, next, p);
-    setBusy(false);
+    try {
+      await s.setQuantity(itemId, next, p);
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (

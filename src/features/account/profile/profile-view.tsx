@@ -10,7 +10,7 @@ import {
   Bell,
   Plus,
 } from 'lucide-react';
-import { unwrap, UserProfileDto, LoyaltyCardDto } from '@/lib/types';
+import { unwrap, list, type Address, UserProfileDto, LoyaltyCardDto } from '@/lib/types';
 import { useShop } from '@/components/shop-context';
 import { Modal } from '@/components/ui';
 import { useRemote, RemoteState } from '../hooks/use-remote';
@@ -18,6 +18,8 @@ import { useRemote, RemoteState } from '../hooks/use-remote';
 export function ProfileView() {
   const remote = useRemote<UserProfileDto>('auth/profile');
   const loyaltyRemote = useRemote<LoyaltyCardDto>('loyalty-card');
+  const addressesRemote = useRemote<Address[]>('addresses');
+  const addresses = list<Address>(addressesRemote.data);
   const s = useShop();
   const [bonusModalOpen, setBonusModalOpen] = useState(false);
 
@@ -26,7 +28,7 @@ export function ProfileView() {
 
   const balanceNumber =
     s.authenticated && typeof cardData?.balance === 'number'
-      ? cardData.balance / 100
+      ? cardData.balance
       : 0;
 
   return (
@@ -58,7 +60,7 @@ export function ProfileView() {
                 {profile?.phone || 'Номер не указан'}
               </strong>
               <span className="native-phone-sub">
-                {profile?.firstName ? `${profile.firstName} ${profile.lastName || ''}`.trim() : profile?.phone || 'Покупатель'}
+                {profile?.firstName ? `${profile.firstName} ${profile.lastName || ''}`.trim() : 'Покупатель'}
               </span>
             </div>
             <ChevronRight size={22} className="native-card-chevron" />
@@ -114,7 +116,9 @@ export function ProfileView() {
                 <Plus size={20} />
               </Link>
             </div>
-            <span className="native-sub-hint">Нет адресов доставки</span>
+            {!addressesRemote.loading && !addressesRemote.error && (
+              <span className="native-sub-hint">{addresses.length ? `Сохранённых адресов: ${addresses.length}` : 'Нет адресов доставки'}</span>
+            )}
           </div>
 
           {/* Bottom Pills */}
