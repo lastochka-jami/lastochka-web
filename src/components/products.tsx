@@ -396,15 +396,12 @@ export function QuickProduct({ id, onClose }: { id: number; onClose: () => void 
   }, [id, shop.storeId, attempt]);
 
   return (
-    <Modal title="О товаре" onClose={onClose} wide>
+    <Modal title="О товаре" onClose={onClose} wide className="product-modal">
       {error ? (
         <ErrorMessage message={error} retry={() => setAttempt(n => n + 1)} />
       ) : p ? (
         <>
           <ProductDetail p={p} />
-          <Link className="text-button" href={'/product/' + id} onClick={onClose}>
-            Открыть страницу товара <ArrowUpRight size={16} />
-          </Link>
         </>
       ) : (
         <p>Загружаем товар…</p>
@@ -484,6 +481,7 @@ export function ProductDetail({ p: initial, stickyBuy = false }: { p: Product; s
         )}
       </div>
       <div className="product-information">
+        <div className="product-information-body">
         {p.category && (
           <Link className="eyebrow" href={'/category/' + (p.category.slug || p.category.id)}>
             {p.category.name}
@@ -560,14 +558,7 @@ export function ProductDetail({ p: initial, stickyBuy = false }: { p: Product; s
           </fieldset>
         ))}
 
-        <div className="detail-buy">
-          {missing ? (
-            <p className="muted">Выберите обязательные добавки</p>
-          ) : (
-            <Buy p={p} supplements={supplements} />
-          )}
-          <span className="muted">{p.stockQuantity > 0 ? 'В наличии' : 'Нет в наличии'}</span>
-        </div>
+
 
         {p.description && (
           <section>
@@ -605,6 +596,15 @@ export function ProductDetail({ p: initial, stickyBuy = false }: { p: Product; s
         )}
 
         {p.additionalInfo && <p>{p.additionalInfo}</p>}
+        </div>
+        <div className="detail-buy">
+          {missing ? (
+            <p className="muted">Выберите обязательные добавки</p>
+          ) : (
+            <Buy p={p} supplements={supplements} />
+          )}
+
+        </div>
       </div>
       {stickyBuy && (
         <div className="mobile-product-buy-bar" aria-label="Быстрая покупка">

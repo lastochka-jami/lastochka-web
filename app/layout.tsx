@@ -1,3 +1,4 @@
+import { ProductDialogNavigation } from '@/components/product-dialog-navigation';
 import type { Metadata, Viewport } from 'next';
 import Link from 'next/link';
 import { ShopProvider } from '@/components/shop-context';
@@ -65,6 +66,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         </a>
         <ShopProvider>
           <Header store={store} />
+          <ProductDialogNavigation />
           <main id="main" className="container">
             {children}
           </main>

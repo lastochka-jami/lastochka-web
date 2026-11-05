@@ -5388,3 +5388,31 @@ button, [role="button"], input, select { min-height: var(--control-size); }
 @media (max-width: 767px) {
   .has-mobile-buy-bar .detail-price { display: none; }
 }
+
+/* Product links open a contained card over the current storefront. */
+.detail-buy { background: transparent; padding: 0; }
+dialog.product-modal { width: min(1120px, calc(100vw - 48px)); max-height: calc(100dvh - 48px); border-radius: 28px; }
+.product-modal .modal-inner { padding: 24px; }
+.product-modal .modal-heading { top: -24px; margin: -24px -24px 20px; padding: 12px 24px; }
+.product-modal .modal-heading h2 { font-size: 14px; color: var(--muted); font-weight: 500; }
+.product-modal .product-detail { gap: 28px; }
+.product-modal .gallery > img, .product-modal .gallery > .photo-placeholder { max-height: 480px; }
+.product-modal .product-information h1 { font-size: 28px; }
+.product-modal .detail-buy { position: sticky; bottom: -24px; z-index: 6; margin-bottom: 0; padding: 12px 0 24px; background: #fff; }
+.product-modal .detail-buy .add-button { flex: 1; }
+@media (max-width: 767px) {
+  dialog.product-modal { width: 100%; max-width: 100%; max-height: calc(100dvh - var(--safe-top)); margin: auto 0 0; border-radius: 24px 24px 0 0; }
+  .product-modal .modal-inner { padding: 16px var(--gutter) calc(16px + var(--safe-bottom)); }
+  .product-modal .modal-heading { top: -16px; margin: -16px calc(-1 * var(--gutter)) 12px; padding: 8px var(--gutter); }
+  .product-modal .product-detail { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .product-modal .product-information h1 { font-size: 24px; }
+  .product-modal .detail-buy { bottom: calc(-16px - var(--safe-bottom)); padding-bottom: calc(16px + var(--safe-bottom)); flex-direction: row; }
+}
+.product-modal .product-information { display: flex; flex-direction: column; max-height: calc(100dvh - 160px); }
+.product-modal .product-information-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 8px; }
+.product-modal .detail-buy { position: static; flex-shrink: 0; padding: 16px 0 0; margin: 16px 0 0; border-top: 1px solid var(--line); }
+@media (max-width: 767px) {
+  .product-modal .product-information { max-height: none; }
+  .product-modal .product-information-body { overflow: visible; padding-right: 0; }
+  .product-modal .detail-buy { position: sticky; bottom: calc(-16px - var(--safe-bottom)); padding-bottom: calc(16px + var(--safe-bottom)); }
+}

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
-import { ProductPage } from '@/features/storefront';
+import { Catalog } from '@/features/storefront';
+import { DirectProductDialog } from '@/components/product-dialog-navigation';
 import { api, selectedStore } from '@/lib/upstream';
 import { unwrap, Product, product } from '@/lib/types';
 
@@ -49,7 +50,9 @@ export default async function ProductRoute({
 }) {
   const { id } = await params;
   try {
-    return await ProductPage({ id });
+    const store = await selectedStore();
+    await api(`products/${encodeURIComponent(id)}?storeId=${store}`);
+    return <><Catalog kind="catalog" params={{}} /><DirectProductDialog id={Number(id)} /></>;
   } catch (err: any) {
     if (err?.status === 404 || err?.statusCode === 404) {
       notFound();
