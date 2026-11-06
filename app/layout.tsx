@@ -1,9 +1,9 @@
 import { ProductDialogNavigation } from '@/components/product-dialog-navigation';
 import type { Metadata, Viewport } from 'next';
-import Link from 'next/link';
 import { ShopProvider } from '@/components/shop-context';
 import { Header } from '@/components/header';
-import { HomeBrandLink } from '@/components/home-brand-link';
+import { Footer } from '@/components/footer';
+import type { AppSettingsContacts } from '@/lib/footer-content';
 import { publicApi, selectedStore } from '@/lib/upstream';
 import { unwrap, Store } from '@/lib/types';
 import './globals.css';
@@ -58,6 +58,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     // Graceful fallback to default null
   }
 
+  const settings = await publicApi('app-settings')
+    .then(response => unwrap<AppSettingsContacts>(response))
+    .catch(() => null);
+
   return (
     <html lang="ru">
       <body>
@@ -70,14 +74,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <main id="main" className="container">
             {children}
           </main>
-          <footer className="container footer">
-            <HomeBrandLink className="footer-brand" imageSize={30}>
-              <span>Ласточка Джами</span>
-            </HomeBrandLink>
-            <span>Всё любимое — рядом</span>
-            <Link href="/faq">Вопросы и ответы</Link>
-            <Link href="/info">Информация и контакты</Link>
-          </footer>
+          <Footer settings={settings} />
         </ShopProvider>
       </body>
     </html>
