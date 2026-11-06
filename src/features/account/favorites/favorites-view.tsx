@@ -67,7 +67,7 @@ export function FavoritesView() {
           <div className="favorites-empty-container">
             <div className="favorites-swallow-wrap">
               <img
-                src="/shop/images/swallow.webp"
+                src="/shop/images/swallow-transparent-v2.webp"
                 alt="Ласточка"
                 className="favorites-swallow-img"
                 width={190}

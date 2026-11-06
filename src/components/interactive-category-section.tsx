@@ -31,7 +31,7 @@ export function InteractiveCategorySection({
       <div className="category-tiles">
         {subcategories.map((c) => {
           const media = categoryMedia(c);
-          const imageSrc = media.foreground || media.background;
+          const imageSrc = media.foreground;
 
           return (
             <Link

@@ -387,7 +387,7 @@ export function categoryMedia(v: Partial<Category> | any): {
   background: string | null;
 } {
   return {
-    foreground: validUrl(v?.image?.thumbPath) ? v.image.thumbPath : validUrl(v?.image?.path) ? v.image.path : null,
+    foreground: validUrl(v?.image?.path) ? v.image.path : validUrl(v?.image?.thumbPath) ? v.image.thumbPath : null,
     background: validUrl(v?.backgroundImage?.thumbPath) ? v.backgroundImage.thumbPath : validUrl(v?.backgroundImage?.path) ? v.backgroundImage.path : null,
   };
 }

@@ -146,7 +146,7 @@ export function Modal({
 export function Empty({ title, children, headingLevel = 2 }: { title: string; children?: ReactNode; headingLevel?: 1 | 2 }) {
   return (
     <div className="empty">
-      <img src="/shop/images/swallow.webp" alt="" width={72} height={72} />
+      <img src="/shop/images/swallow-transparent-v2.webp" alt="" width={72} height={72} />
       {headingLevel === 1 ? <h1>{title}</h1> : <h2>{title}</h2>}
       {children}
     </div>

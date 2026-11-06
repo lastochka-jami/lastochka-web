@@ -366,7 +366,7 @@ export function AuthGate({
 
   return (
     <div className="auth-gate">
-      <img src="/shop/images/swallow.webp" alt="" width={64} height={64} />
+      <img src="/shop/images/swallow-transparent-v2.webp" alt="" width={64} height={64} />
       <h1>{title}</h1>
       <p>Ваши покупки, адреса и бонусы будут доступны после входа.</p>
       <button className="primary" onClick={s.login} type="button">

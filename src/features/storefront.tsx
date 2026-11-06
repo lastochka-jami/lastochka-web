@@ -223,7 +223,7 @@ export function CategoryTiles({
     <div className="category-tiles">
       {categories.map((c, i) => {
         const media = categoryMedia(c);
-        const imageSrc = media.foreground || media.background;
+        const imageSrc = media.foreground;
         const tileBg = backgroundColor || getCategoryGroupColor(c);
         return (
           <Link

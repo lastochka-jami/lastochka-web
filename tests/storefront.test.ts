@@ -65,5 +65,5 @@ test('thumbnail normalization preserves gallery originals and rejects invalid th
   assert.equal(p.images[0].path, path);
   assert.equal(p.images[0].thumbPath, thumbPath);
   assert.equal(product({ id: 1, images: [{ path, thumbPath: 'javascript:bad' }] }).preview, path);
-  assert.equal(categoryMedia({ image: { path, thumbPath } }).foreground, thumbPath);
+  assert.equal(categoryMedia({ image: { path, thumbPath } }).foreground, path);
 });

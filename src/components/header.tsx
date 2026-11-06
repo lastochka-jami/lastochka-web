@@ -11,7 +11,6 @@ import {
   ShoppingBasket,
   House,
   LayoutGrid,
-  Menu,
   Bell,
   ChevronDown,
   ChevronLeft,
@@ -135,7 +134,7 @@ export function Header({ store }: { store: Store | null }) {
 
   const nav = [
     { href: '/', title: 'Главная', Icon: House },
-    { href: '/catalog', title: 'Каталог', Icon: Menu },
+    { href: '/catalog', title: 'Каталог', Icon: LayoutGrid },
     { href: '/favorites', title: 'Избранное', Icon: Heart },
     { href: '/profile', title: 'Профиль', Icon: UserRound },
   ];
@@ -202,7 +201,7 @@ export function Header({ store }: { store: Store | null }) {
           </HomeBrandLink>
 
           <Link className="catalog-button" href="/catalog">
-            <Menu size={20} /> Каталог
+            <LayoutGrid size={20} /> Каталог
           </Link>
 
           <SearchBox onOpenScanner={() => setScannerOpen(true)} />

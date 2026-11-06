@@ -1351,7 +1351,6 @@ legend { padding-inline: 5px; font-weight: 700; }
   width: 76px;
   height: 76px;
   object-fit: contain;
-  mix-blend-mode: multiply;
   animation: float-swallow 3.5s ease-in-out infinite;
 }
 .empty h2 {
@@ -1994,7 +1993,6 @@ main.container:has(.catalog-hint-section) { padding-bottom: 36px; }
   height: 100%;
   object-fit: contain;
   transform: scaleX(-1);
-  mix-blend-mode: multiply;
 }
 
 /* Promo Card */
@@ -3777,7 +3775,6 @@ button, [role="button"], input, select { min-height: var(--control-size); }
   width: 180px;
   height: auto;
   object-fit: contain;
-  mix-blend-mode: multiply;
   animation: floatSwallow 3s ease-in-out infinite;
 }
 @keyframes floatSwallow {
@@ -5530,3 +5527,6 @@ main.container:has(.catalog-layout), main.container:has(.catalog-sections), main
   .footer-legal { overflow-wrap: anywhere; }
   .brand img { width: 38px; height: 38px; }
 }
+
+/* API cutouts contain a faint alpha matte even outside the subject. */
+.category-tile-image { filter: url(#category-alpha-cleanup); }

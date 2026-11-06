@@ -65,6 +65,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="ru">
       <body>
+        <svg width="0" height="0" aria-hidden="true" style={{ position: 'absolute', pointerEvents: 'none' }}>
+          <defs>
+            <filter id="category-alpha-cleanup" colorInterpolationFilters="sRGB">
+              <feComponentTransfer>
+                <feFuncA type="linear" slope="1.04" intercept="-0.04" />
+              </feComponentTransfer>
+            </filter>
+          </defs>
+        </svg>
         <a className="skip-link" href="#main">
           Перейти к содержимому
         </a>

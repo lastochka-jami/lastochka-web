@@ -289,6 +289,7 @@ function formatRub(v: unknown): string {
   return '—';
 }
 
+  const canSelectTime = s.authenticated && Boolean(slotData?.slots?.length);
   const selectedSlotObj = slotData?.slots?.find((sItem: any) => String(sItem.id) === String(slot));
   const timeBannerText = selectedSlotObj
     ? `${date === todayStr ? 'Сегодня' : date}, ${selectedSlotObj.timeSlot}`
@@ -454,7 +455,7 @@ function formatRub(v: unknown): string {
             </div>
 
             {/* Time Slot Banner */}
-            <div className="cart-time-banner-wrap">
+            {canSelectTime ? <div className="cart-time-banner-wrap">
               <button
                 type="button"
                 className="cart-time-banner"
@@ -512,7 +513,7 @@ function formatRub(v: unknown): string {
                   </div>
                 </div>
               )}
-            </div>
+            </div> : <p className="muted">Время согласуем при подтверждении.</p>}
 
             {/* Address selector / info */}
             {mode === 'courier' ? (
@@ -651,7 +652,7 @@ function formatRub(v: unknown): string {
                 <p>Стоимость упаковки уточняется магазином.</p>
               </div>
               <div className="cart-packaging-image">
-                <img src="/shop/images/swallow.webp" alt="Ласточка" width={68} height={54} />
+                <img src="/shop/images/swallow-transparent-v2.webp" alt="Ласточка" width={68} height={54} />
               </div>
             </div>
 
