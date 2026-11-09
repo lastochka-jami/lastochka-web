@@ -1,0 +1,10 @@
+title = "Lastochka secret scanning"
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Synthetic session key used only by the local Playwright fixture"
+condition = "AND"
+paths = ['''^playwright(?:\.regression)?\.config\.ts$''']
+regexTarget = "secret"
+regexes = ['''^0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef$''']

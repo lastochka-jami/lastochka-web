@@ -30,6 +30,24 @@ class DeployTests(unittest.TestCase):
                     receive.extract(archive, root / 'release')
                 self.assertFalse((root / 'outside').exists())
 
+    def test_retention_permission_error_does_not_fail_deployment(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'links').mkdir()
+            (root / 'releases').mkdir()
+            releases = []
+            for index in range(5):
+                release = root / 'releases' / (str(index) * 40 + '-release')
+                release.mkdir()
+                releases.append(release)
+            # Even an older active release must be preserved.
+            (root / 'links/current').symlink_to(releases[0])
+            with patch.object(receive, 'BASE', root), patch.object(receive.shutil, 'rmtree', side_effect=PermissionError('cache')) as remove, patch('sys.stderr', new_callable=io.StringIO) as errors:
+                receive.prune_releases()
+            self.assertTrue(remove.called)
+            self.assertNotIn(releases[0], [call.args[0] for call in remove.call_args_list])
+            self.assertIn('Warning:', errors.getvalue())
+
     def test_failed_healthcheck_restores_previous_release(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
