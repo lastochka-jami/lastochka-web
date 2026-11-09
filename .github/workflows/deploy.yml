@@ -1,7 +1,5 @@
 name: Deploy web
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
@@ -35,11 +33,15 @@ jobs:
       - name: Deploy and verify (server rolls back on failure)
         env:
           DEPLOY_KEY: ${{ secrets.WEB_DEPLOY_KEY }}
+          DEPLOY_HOST: ${{ secrets.WEB_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.WEB_DEPLOY_USER }}
           KNOWN_HOSTS: ${{ secrets.WEB_KNOWN_HOSTS }}
         run: |
+          : "${DEPLOY_HOST:?WEB_DEPLOY_HOST is required}"
+          : "${DEPLOY_USER:?WEB_DEPLOY_USER is required}"
           install -d -m 700 ~/.ssh
           printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/web
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/web ~/.ssh/known_hosts
           trap 'rm -f ~/.ssh/web' EXIT
-          ssh -i ~/.ssh/web -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 lastochka-deploy@161.104.53.226 "deploy $GITHUB_SHA" < "$RUNNER_TEMP/web.tgz"
+          ssh -i ~/.ssh/web -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 "$DEPLOY_USER@$DEPLOY_HOST" "deploy $GITHUB_SHA" < "$RUNNER_TEMP/web.tgz"

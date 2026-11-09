@@ -78,6 +78,22 @@ def activate(release, revision):
         raise
 
 
+def prune_releases():
+    """Retention is maintenance: a cleanup failure must not fail a healthy deploy."""
+    releases = sorted(
+        (p for p in (BASE / 'releases').iterdir()
+         if re.fullmatch(r'[0-9a-f]{40}-.+', p.name)),
+        key=lambda p: p.stat().st_mtime, reverse=True,
+    )
+    current = (BASE / 'links/current').resolve()
+    for old in releases[3:]:
+        if old.resolve() != current:
+            try:
+                shutil.rmtree(old)
+            except OSError as error:
+                print(f'Warning: could not remove old release {old.name}: {error}', file=sys.stderr)
+
+
 def main():
     match = re.fullmatch(r'deploy ([0-9a-f]{40})', os.environ.get('SSH_ORIGINAL_COMMAND', ''))
     if not match:
@@ -113,11 +129,12 @@ def main():
                 if (BASE / 'links/current').resolve() != release:
                     shutil.rmtree(release)
                 raise
-        # Keep current + two previous automatically uploaded releases.
-        releases = sorted((p for p in (BASE / 'releases').iterdir() if re.fullmatch(r'[0-9a-f]{40}-.+', p.name)), key=lambda p: p.stat().st_mtime, reverse=True)
-        for old in releases[3:]:
-            if old != (BASE / 'links/current').resolve():
-                shutil.rmtree(old)
+        # Runtime-created caches may have stricter permissions than release files.
+        # Activation and health checks have succeeded; report retention separately.
+        try:
+            prune_releases()
+        except OSError as error:
+            print(f'Warning: release retention failed: {error}', file=sys.stderr)
         print('Deployed ' + revision, flush=True)
 
 

@@ -1,4 +1,0 @@
-lastochka.duckdns.org {
-	encode zstd gzip
-	reverse_proxy lastochka:3001
-}
