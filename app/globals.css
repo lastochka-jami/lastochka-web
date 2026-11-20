@@ -2901,6 +2901,7 @@ main.container:has(.catalog-hint-section) { padding-bottom: 36px; }
     line-height: 1.1;
   }
   .welcome .loyalty-hint-text {
+    display: none;
     font-size: 10px;
     color: #8e8e93;
     line-height: 1.2;
