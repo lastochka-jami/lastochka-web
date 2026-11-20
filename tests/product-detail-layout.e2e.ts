@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test';
 test('product opens over search and closes back to the same results',async({page})=>{
-  for(const width of [320,390,1440]){
+  for(const width of [320,390,767,768,1440]){
     await page.setViewportSize({width,height:844});
     await page.goto('/shop/search?query=порция');
     const url=page.url();
@@ -9,6 +9,12 @@ test('product opens over search and closes back to the same results',async({page
     const modal=page.locator('dialog.product-modal');
     await expect(modal).toBeVisible();
     await expect(modal.locator('h1')).toBeVisible();
+    if(width<768){
+      await expect.poll(()=>modal.evaluate(el=>{
+        const rect=el.getBoundingClientRect();
+        return Math.max(Math.abs(rect.left),Math.abs(innerWidth-rect.right));
+      })).toBeLessThanOrEqual(1);
+    }
     expect(page.url()).toBe(url);
     await expect(modal).not.toContainText('В наличии');
     await expect(modal).not.toContainText('Открыть страницу товара');
