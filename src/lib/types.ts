@@ -288,6 +288,7 @@ export interface StoryDto {
 }
 
 export interface UserProfileDto {
+  bonusBalance?: number;
   id?: number;
   phone?: string;
   firstName?: string | null;

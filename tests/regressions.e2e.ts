@@ -99,7 +99,8 @@ test('loyalty uses 100 whole bonuses and never fabricates a pending-card QR', as
   await page.route('**/api/session',r=>r.fulfill({json:{authenticated:true,csrf:'test',storeId:2,checkoutEnabled:false,publicOrigin:'http://127.0.0.1:3011'}}));
   await page.route('**/api/shop/cart**',r=>r.fulfill({json:{data:cart}}));
   await page.route('**/api/shop/bonuses?**',r=>r.fulfill({json:{data:[{id:1,amount:100,description:'Тестовое начисление'}]}}));
-  await page.route('**/api/shop/loyalty-card',r=>r.fulfill({json:{data:{status:'pending',balance:100}}}));
+  await page.route('**/api/shop/auth/profile',r=>r.fulfill({json:{data:{id:1,bonusBalance:100}}}));
+  await page.route('**/api/shop/loyalty-card',r=>r.fulfill({json:{data:{status:'pending',balance:999}}}));
   await page.goto('/shop/bonuses');
   await expect(page.locator('.loyalty-number-text')).toHaveText('100');
   await page.getByRole('button',{name:'QR-код карты постоянного покупателя'}).click();

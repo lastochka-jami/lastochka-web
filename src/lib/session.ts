@@ -283,14 +283,3 @@ export async function rateLimit(id: string, max = 10, windowMs = 600000): Promis
   const store = getSessionStore();
   return store.rateLimit(hash(id), max, windowMs);
 }
-
-export function getAllowedPaymentOrigin(): string {
-  if (process.env.ALLOWED_PAYMENT_RETURN_URL) {
-    try {
-      return new URL(process.env.ALLOWED_PAYMENT_RETURN_URL).origin;
-    } catch {
-      // ignore
-    }
-  }
-  return process.env.PUBLIC_ORIGIN || 'http://localhost:3000';
-}

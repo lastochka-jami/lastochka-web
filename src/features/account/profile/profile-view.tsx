@@ -10,26 +10,20 @@ import {
   Bell,
   Plus,
 } from 'lucide-react';
-import { unwrap, list, type Address, UserProfileDto, LoyaltyCardDto } from '@/lib/types';
+import { unwrap, list, type Address, UserProfileDto } from '@/lib/types';
 import { useShop } from '@/components/shop-context';
+import { BonusBalance } from '@/components/bonus-balance';
 import { Modal } from '@/components/ui';
 import { useRemote, RemoteState } from '../hooks/use-remote';
 
 export function ProfileView() {
-  const remote = useRemote<UserProfileDto>('auth/profile');
-  const loyaltyRemote = useRemote<LoyaltyCardDto>('loyalty-card');
+  const s = useShop();
+  const remote = s.profile;
   const addressesRemote = useRemote<Address[]>('addresses');
   const addresses = list<Address>(addressesRemote.data);
-  const s = useShop();
   const [bonusModalOpen, setBonusModalOpen] = useState(false);
 
   const profile = unwrap<UserProfileDto>(remote.data);
-  const cardData = unwrap<LoyaltyCardDto>(loyaltyRemote.data);
-
-  const balanceNumber =
-    s.authenticated && typeof cardData?.balance === 'number'
-      ? cardData.balance
-      : 0;
 
   return (
     <div className="account-section profile-page">
@@ -69,7 +63,7 @@ export function ProfileView() {
           {/* Card 2: Bonus Block */}
           <div className="native-profile-card native-bonus-card">
             <div className="native-bonus-left">
-              <strong className="native-bonus-value">{balanceNumber}</strong>
+              <strong className="native-bonus-value"><BonusBalance /></strong>
               <span className="native-bonus-unit">бонусов</span>
             </div>
             <button

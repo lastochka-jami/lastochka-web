@@ -64,7 +64,7 @@ Open **http://localhost:3000/shop/**. The `/shop` base path is fixed at build ti
 | `SECONDARY_PUBLIC_ORIGIN` | Optional additional allowed storefront origin |
 | `SESSION_DB_PATH` | SQLite session database path; the example enables SQLite storage |
 | `SESSION_ENCRYPTION_KEY` | Random 64-character hexadecimal key for session token encryption |
-| `ALLOWED_PAYMENT_RETURN_URL` | Approved payment return origin |
+| `ALLOWED_PAYMENT_RETURN_URL` | Legacy, ignored; returns use the current configured storefront origin |
 | `CHECKOUT_ENABLED` | Enables order placement after payment integration has been verified |
 
 The in-memory session adapter is used when no SQLite path or explicit storage driver is configured. Use persistent session storage for deployments that must retain sessions across restarts.

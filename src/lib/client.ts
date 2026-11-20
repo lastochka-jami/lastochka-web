@@ -7,6 +7,12 @@ import { unwrap } from './types';
 let cachedCsrfToken = '';
 let pendingSession: Promise<BrowserSessionData> | undefined;
 const pendingGets = new Map<string, Promise<any>>();
+let sessionRevision = 0;
+
+export function resetPersonalRequests() {
+  ++sessionRevision;
+  pendingGets.clear();
+}
 
 export interface BrowserSessionData {
   authenticated: boolean;
@@ -54,6 +60,7 @@ async function sendRequest<T = any>(
   body?: unknown,
   options: { idempotencyKey?: string } = {},
 ): Promise<T> {
+  const revision = sessionRevision;
   if (method !== 'GET' && !cachedCsrfToken) {
     await browserSession();
   }
@@ -94,7 +101,7 @@ async function sendRequest<T = any>(
   if (data?.csrf) cachedCsrfToken = data.csrf;
 
   if (!response.ok) {
-    if (response.status === 401 && typeof window !== 'undefined' && window.dispatchEvent) window.dispatchEvent(new Event('lastochka:unauthorized'));
+    if (response.status === 401 && revision === sessionRevision && typeof window !== 'undefined' && window.dispatchEvent) window.dispatchEvent(new Event('lastochka:unauthorized'));
     const fields = data?.errors ? Object.values(data.errors).flat().join(' ') : '';
     const message =
       [data?.message, fields].filter(Boolean).join(' ') || 'Не удалось выполнить запрос';

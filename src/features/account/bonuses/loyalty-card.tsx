@@ -5,6 +5,7 @@ import Link from 'next/link';
 
 import { QrCode, Gift, Smartphone, ArrowRight } from 'lucide-react';
 import { useShop } from '@/components/shop-context';
+import { BonusBalance } from '@/components/bonus-balance';
 import { unwrap, LoyaltyCardDto } from '@/lib/types';
 import { Modal } from '@/components/ui';
 import { useRemote, RemoteState } from '../hooks/use-remote';
@@ -14,12 +15,14 @@ export function LoyaltyCard({ compact = false }: { compact?: boolean }) {
   const remote = useRemote<LoyaltyCardDto>(s.authenticated ? 'loyalty-card' : null);
   const [modalOpen, setModalOpen] = useState(false);
   const [infoModalOpen, setInfoModalOpen] = useState(false);
-  const [qrCodeDataUrl, setQrCodeDataUrl] = useState('');
+  const [qr, setQr] = useState({ key: '', url: '' });
 
   const cardData = unwrap<LoyaltyCardDto>(remote.data);
+  const qrKey = `${s.authKey}:${cardData?.status}:${cardData?.qrPayload}`;
+  const qrCodeDataUrl = s.authenticated && qr.key === qrKey ? qr.url : '';
 
   useEffect(() => {
-    setQrCodeDataUrl('');
+    setQr({ key: qrKey, url: '' });
     if (cardData?.status !== 'active' || !cardData.qrPayload?.trim()) return;
 
     let cancelled = false;
@@ -30,15 +33,15 @@ export function LoyaltyCard({ compact = false }: { compact?: boolean }) {
       errorCorrectionLevel: 'M',
     }))
       .then((dataUrl) => {
-        if (!cancelled) setQrCodeDataUrl(dataUrl);
+        if (!cancelled) setQr({ key: qrKey, url: dataUrl });
       })
       .catch(() => {
-        if (!cancelled) setQrCodeDataUrl('');
+        if (!cancelled) setQr({ key: qrKey, url: '' });
       });
     return () => {
       cancelled = true;
     };
-  }, [cardData?.status, cardData?.qrPayload]);
+  }, [cardData?.status, cardData?.qrPayload, qrKey]);
 
   const handleCardClick = () => {
     if (!s.authenticated) {
@@ -47,12 +50,6 @@ export function LoyaltyCard({ compact = false }: { compact?: boolean }) {
       setModalOpen(true);
     }
   };
-
-  const balanceNumber =
-    s.authenticated && typeof cardData?.balance === 'number'
-      ? Math.trunc(cardData.balance)
-      : 0;
-  const formattedBalance = `${balanceNumber.toLocaleString('ru-RU')} бонусов`;
 
   return (
     <>
@@ -63,7 +60,7 @@ export function LoyaltyCard({ compact = false }: { compact?: boolean }) {
               <span className="loyalty-icon-home">⌂</span>
               <div>
                 <span className="loyalty-label-text">Бонусы</span>
-                <strong className="loyalty-number-text">{balanceNumber}</strong>
+                <strong className="loyalty-number-text"><BonusBalance /></strong>
               </div>
             </div>
             <span className="loyalty-hint-text">Копите<br />и тратьте</span>
@@ -133,7 +130,7 @@ export function LoyaltyCard({ compact = false }: { compact?: boolean }) {
               <div className="qr-panel">
                 <img src={qrCodeDataUrl} alt="QR-код карты лояльности" />
                 {cardData?.cardNumber && <p className="card-num">{cardData.cardNumber}</p>}
-                <strong>{formattedBalance}</strong>
+                <strong><BonusBalance /> бонусов</strong>
                 <p className="muted">Покажите QR-код на кассе для начисления и списания</p>
               </div>
             ) : (

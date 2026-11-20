@@ -8,6 +8,7 @@ import { paymentReturnUrl, request } from '@/lib/client';
 import { useShop } from '@/components/shop-context';
 import { Empty, ErrorMessage } from '@/components/ui';
 import { useRemote, RemoteState } from '../hooks/use-remote';
+import { canCancelOrder } from '@/lib/order-actions';
 
 export function goPayment(url: unknown) {
   if (typeof url !== 'string') {
@@ -85,6 +86,11 @@ export function OrdersView({
 
     return () => clearInterval(interval);
   }, [id, paymentReturn, reloadOrder, reloadPaymentStatus]);
+
+  const reloadProfile = s.profile.reload;
+  useEffect(() => {
+    void reloadProfile();
+  }, [reloadProfile, order?.status, order?.isPaid, paymentStatus.data]);
 
   return (
     <div className="account-section">
@@ -228,7 +234,7 @@ export function OrdersView({
                     </button>
                   )}
 
-                {order.canCancel === true && (
+                {canCancelOrder(order) && (
                   <button
                     className="text-button danger"
                     type="button"
@@ -237,6 +243,7 @@ export function OrdersView({
                         void s.run(async () => {
                           await request(`orders/${id}/cancel`, 'POST');
                           await remote.reload();
+                          await s.profile.reload();
                         });
                       }
                     }}

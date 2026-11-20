@@ -30,7 +30,7 @@ test('matches exact reference palette for all 17 categories and fallback', () =>
 });
 
 
-test('payment callbacks always use the configured canonical origin',()=>{
+test('payment callbacks use the session storefront origin',()=>{
   assert.equal(paymentReturnUrl('/cards?binding=return','https://lastochka.duckdns.org'), 'https://lastochka.duckdns.org/shop/cards?binding=return');
   assert.equal(paymentReturnUrl('/payment','http://127.0.0.1:3000'), 'http://127.0.0.1:3000/shop/payment');
   assert.equal(paymentReturnUrl('/payment?orderId=10','https://lastochki.store'), 'https://lastochki.store/shop/payment?orderId=10');

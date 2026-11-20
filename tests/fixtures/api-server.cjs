@@ -4,9 +4,25 @@ const category = {id:1,slug:'food',name:'Продукты',isLeaf:true};
 const group = {id:1,slug:'firmennye-bliuda',title:'Фирменные блюда',is_recommended:true,productsCount:1};
 http.createServer((req,res) => {
   const u = new URL(req.url,'http://local');
+  // Local contract fixtures only; no SMS, bank requests or real credentials.
+  if (u.pathname.endsWith('/auth/phone-confirm')) {
+    res.writeHead(200, {'Content-Type':'application/json'});
+    return res.end(JSON.stringify({token:'fixture-token', user:{id:1,bonusBalance:125}}));
+  }
+  if (u.pathname.endsWith('/payment-cards/bind')) {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      const target = JSON.parse(body).returnUrl;
+      res.writeHead(200, {'Content-Type':'application/json'});
+      res.end(JSON.stringify({confirmationUrl:'https://payment.example.test/confirm?returnUrl='+encodeURIComponent(target)}));
+    });
+    return;
+  }
   let data = [];
   let status = 200;
-  if (/\/products\/\d+$/.test(u.pathname)) { const id=Number(u.pathname.split('/').pop()); data = id>=10&&id<=33 ? {...product,id} : {message:'Товар не найден'}; if (id<10||id>33) status = 404; }
+  if (u.pathname.endsWith('/auth/profile')) data = {id:1, phone:'+79990000000', bonusBalance:125};
+  else if (/\/products\/\d+$/.test(u.pathname)) { const id=Number(u.pathname.split('/').pop()); data = id>=10&&id<=33 ? {...product,id} : {message:'Товар не найден'}; if (id<10||id>33) status = 404; }
   else if (u.pathname.includes('/products')) data = u.searchParams.has('query') ? Array.from({length:24},(_,i)=>({...product,id:10+i})) : [product];
   else if (u.pathname.endsWith('/search/suggestions')) data = [{id:10,title:product.title,type:'product'}];
   else if (u.pathname.endsWith('/banners')) data = [

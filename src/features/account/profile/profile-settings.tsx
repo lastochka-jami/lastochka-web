@@ -9,9 +9,9 @@ import { Modal, ErrorMessage } from '@/components/ui';
 import { useRemote, RemoteState } from '../hooks/use-remote';
 
 export function ProfileSettingsView() {
-  const profileRemote = useRemote<UserProfileDto>('auth/profile');
-  const notifRemote = useRemote<UserNotificationSettingsDto>('users/me/notification-settings');
   const s = useShop();
+  const profileRemote = s.profile;
+  const notifRemote = useRemote<UserNotificationSettingsDto>('users/me/notification-settings');
   const router = useRouter();
 
   const [busy, setBusy] = useState(false);

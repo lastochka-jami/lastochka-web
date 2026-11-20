@@ -3,21 +3,25 @@
 import { useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { request } from '@/lib/client';
 import { ErrorMessage } from '@/components/ui';
+import { useShop } from '@/components/shop-context';
 
 export interface RemoteStateResult<T = any> {
   data: T | undefined;
   error: string;
   loading: boolean;
-  reload: () => Promise<void>;
+  reload: () => Promise<T | void>;
 }
 
 export function useRemote<T = any>(path: string | null): RemoteStateResult<T> {
+  const { authKey } = useShop();
+  // Include session identity even when the endpoint stays unchanged across accounts.
+  const scope = `${authKey || 'guest'}:${path}`;
   const [state, setState] = useState<{
     path: string | null;
     data: T | undefined;
     error: string;
     loading: boolean;
-  }>({ path, data: undefined, error: '', loading: !!path });
+  }>({ path: scope, data: undefined, error: '', loading: !!path });
   const requestId = useRef(0);
 
   const load = useCallback(async () => {
@@ -27,27 +31,28 @@ export function useRemote<T = any>(path: string | null): RemoteStateResult<T> {
       return;
     }
     setState((current) => ({
-      path,
-      data: current.path === path ? current.data : undefined,
+      path: scope,
+      data: current.path === scope ? current.data : undefined,
       error: '',
       loading: true,
     }));
     try {
       const response = await request<T>(path);
       if (requestId.current === id) {
-        setState({ path, data: response, error: '', loading: false });
+        setState({ path: scope, data: response, error: '', loading: false });
+        return response;
       }
     } catch (e: any) {
       if (requestId.current === id) {
         setState((current) => ({
-          path,
-          data: e?.status !== 401 && current.path === path ? current.data : undefined,
+          path: scope,
+          data: e?.status !== 401 && current.path === scope ? current.data : undefined,
           error: e instanceof Error ? e.message : 'Не удалось загрузить данные',
           loading: false,
         }));
       }
     }
-  }, [path]);
+  }, [path, scope]);
 
   useEffect(() => {
     if (!path) {
@@ -61,7 +66,7 @@ export function useRemote<T = any>(path: string | null): RemoteStateResult<T> {
     };
   }, [load, path]);
 
-  const current = state.path === path ? state : {
+  const current = state.path === scope ? state : {
     path,
     data: undefined,
     error: '',

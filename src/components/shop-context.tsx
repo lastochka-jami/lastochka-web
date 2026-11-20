@@ -8,9 +8,10 @@ import {
   ReactNode,
   useCallback,
   useRef,
+  useSyncExternalStore,
 } from 'react';
 import { useRouter } from 'next/navigation';
-import { request, browserSession, requestPhoneCode, confirmPhoneCode } from '@/lib/client';
+import { request, browserSession, requestPhoneCode, confirmPhoneCode, resetPersonalRequests } from '@/lib/client';
 import { Product, Cart, unwrap, Store, list, step } from '@/lib/types';
 import {
   getGuestCart,
@@ -21,8 +22,11 @@ import {
 } from '@/lib/guest-cart';
 import { Modal, ErrorMessage } from './ui';
 import { LOCATION_CHANGED_EVENT, readLocation, type LocationMode } from '@/lib/fulfillment';
+import { ProfileStore, type ProfileState } from '@/lib/profile-state';
 
 export interface ShopContextValue {
+  profile: ProfileState & { reload: () => Promise<void> };
+  authKey: string | null;
   authenticated: boolean;
   ready: boolean;
   cart: Cart | null;
@@ -48,6 +52,9 @@ export const useShop = () => useContext(Context);
 export function ShopProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [authenticated, setAuth] = useState(false);
+  const [profileStore] = useState(() => new ProfileStore(() => request('auth/profile')));
+  const profile = useSyncExternalStore(profileStore.subscribe, profileStore.getSnapshot, profileStore.getSnapshot);
+  const [authKey, setAuthKey] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [cartError, setCartError] = useState('');
   const [cart, setCart] = useState<Cart | null>(null);
@@ -71,8 +78,13 @@ export function ShopProvider({ children }: { children: ReactNode }) {
     try {
       const sessionData = !reloadSession && knownSession.current ? knownSession.current : await browserSession();
       if (version !== refreshVersion.current) return;
+      if (knownSession.current?.csrf !== sessionData.csrf || knownSession.current?.authenticated !== sessionData.authenticated) resetPersonalRequests();
       knownSession.current = sessionData;
       setAuth(sessionData.authenticated);
+      const identity = sessionData.authenticated ? sessionData.csrf : null;
+      setAuthKey(identity);
+      profileStore.setSession(identity);
+      void profileStore.refresh();
       setStoreId(sessionData.storeId);
       setCheckout(sessionData.checkoutEnabled);
       setPublicOrigin(sessionData.publicOrigin);
@@ -101,13 +113,30 @@ export function ShopProvider({ children }: { children: ReactNode }) {
     } finally {
       if (version === refreshVersion.current) setReady(true);
     }
-  }, []);
+  }, [profileStore]);
 
   useEffect(() => {
-    const expired = () => { setAuth(false); setCart(getGuestCart()); setAuthOpen(true); };
+    const expired = () => {
+      ++refreshVersion.current;
+      knownSession.current = null;
+      resetPersonalRequests();
+      profileStore.setSession(null);
+      setAuthKey(null);
+      setAuth(false); setCart(getGuestCart()); setAuthOpen(true);
+    };
     window.addEventListener('lastochka:unauthorized', expired);
     return () => window.removeEventListener('lastochka:unauthorized', expired);
-  }, []);
+  }, [profileStore]);
+
+  useEffect(() => {
+    const recheck = () => { if (document.visibilityState === 'visible') void refresh(); };
+    window.addEventListener('pageshow', recheck);
+    window.addEventListener('focus', recheck);
+    return () => {
+      window.removeEventListener('pageshow', recheck);
+      window.removeEventListener('focus', recheck);
+    };
+  }, [refresh]);
 
   useEffect(() => {
     void refresh();
@@ -183,6 +212,11 @@ export function ShopProvider({ children }: { children: ReactNode }) {
   async function logout() {
     await run(async () => {
       await request('auth/logout', 'POST');
+      profileStore.setSession(null);
+      setAuthKey(null);
+      knownSession.current = null;
+      resetPersonalRequests();
+      ++refreshVersion.current;
       setAuth(false);
       setCart(getGuestCart());
       await refresh();
@@ -191,6 +225,10 @@ export function ShopProvider({ children }: { children: ReactNode }) {
   }
 
   const handleLoginSuccess = async () => {
+    profileStore.setSession(null);
+    setAuthKey(null);
+    knownSession.current = null;
+    resetPersonalRequests();
     setAuthOpen(false);
     setAuth(true);
     ++refreshVersion.current;
@@ -208,6 +246,8 @@ export function ShopProvider({ children }: { children: ReactNode }) {
   return (
     <Context.Provider
       value={{
+        profile: { ...profile, reload: profileStore.refresh },
+        authKey,
         authenticated,
         ready,
         cart,

@@ -74,3 +74,25 @@ test('mutations invalidate pending read sharing and are never deduplicated', asy
     await Promise.all([old, fresh]);
   } finally { globalThis.fetch = original; }
 });
+
+test('account boundary never shares a previous pending personal read', async () => {
+  const { resetPersonalRequests } = await import('../src/lib/client');
+  const original = globalThis.fetch;
+  const releases: (() => void)[] = [];
+  let calls = 0;
+  try {
+    globalThis.fetch = async () => {
+      const id = ++calls;
+      await new Promise<void>(resolve => releases.push(resolve));
+      return Response.json({data:{id,bonusBalance:id*10}});
+    };
+    const old = request('auth/profile');
+    resetPersonalRequests();
+    const fresh = request('auth/profile');
+    assert.equal(calls, 2);
+    releases[1]();
+    assert.deepEqual(await fresh, {data:{id:2,bonusBalance:20}});
+    releases[0]();
+    await old;
+  } finally { globalThis.fetch = original; }
+});

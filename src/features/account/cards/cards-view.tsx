@@ -9,6 +9,7 @@ import { useShop } from '@/components/shop-context';
 import { Modal, Empty } from '@/components/ui';
 import { useRemote, RemoteState } from '../hooks/use-remote';
 import { goPayment } from '../orders/orders-view';
+import { BINDING_STORAGE_KEY, readPendingBinding, bindingError, checkBinding } from '@/lib/card-binding';
 
 export function CardsView() {
   const remote = useRemote<PaymentCardDto[]>('payment-cards');
@@ -19,24 +20,40 @@ export function CardsView() {
   const bindLock = useRef(false);
   const params = useSearchParams();
 
+  const [verification, setVerification] = useState('');
+  const [checking, setChecking] = useState(false);
+  const [retryAvailable, setRetryAvailable] = useState(false);
+  const [checkVersion, setCheckVersion] = useState(0);
+  const returned = params.has('binding') || params.has('status');
+  const userId = s.profile.data?.id;
+  const reloadCards = remote.reload;
+
   useEffect(() => {
-    const returned = params.get('binding') || params.get('status');
-    if (!returned) return;
-    void remote.reload();
-    const normalized = returned.toLowerCase();
-    if (['success', 'succeeded', 'paid', 'return'].includes(normalized)) {
-      s.notice('Проверяем привязку карты. Список обновлён.');
-    } else if (['cancel', 'cancelled', 'canceled'].includes(normalized)) {
-      s.notice('Привязка карты отменена');
-    } else if (['expired', 'timeout'].includes(normalized)) {
-      s.notice('Время привязки карты истекло. Попробуйте ещё раз.');
-    } else if (['error', 'failed'].includes(normalized)) {
-      setBindModal(true);
-      setBindError('Не удалось привязать карту. Попробуйте ещё раз.');
-    }
-  // The URL is the provider's one-shot return signal.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params]);
+    setVerification('');
+    setChecking(false);
+    setRetryAvailable(false);
+    if (!s.authenticated || !userId) return;
+    const pending = readPendingBinding(sessionStorage.getItem(BINDING_STORAGE_KEY), userId);
+    if (!returned && !pending && !checkVersion) return;
+    const controller = new AbortController();
+    setChecking(true);
+    setVerification('Проверяем привязку карты. Ожидаем подтверждения платёжного сервиса…');
+    void checkBinding({ load: reloadCards, baseline: pending?.cardIds ?? null, signal: controller.signal })
+      .then(result => {
+        if (controller.signal.aborted) return;
+        setChecking(false);
+        setRetryAvailable(result !== 'confirmed');
+        if (result === 'confirmed') {
+          sessionStorage.removeItem(BINDING_STORAGE_KEY);
+          setVerification('Карта привязана. Список карт обновлён.');
+        } else if (result === 'unavailable') {
+          setVerification('Не удалось проверить привязку. Проверьте соединение и повторите проверку.');
+        } else {
+          setVerification('Привязка пока не подтверждена. Если вы завершили её в банке, повторите проверку позже.');
+        }
+      });
+    return () => controller.abort();
+  }, [returned, userId, s.authenticated, s.authKey, reloadCards, checkVersion]);
 
   const cards = list<PaymentCardDto>(remote.data);
 
@@ -47,11 +64,15 @@ export function CardsView() {
           <h1>Способы оплаты</h1>
           <p className="muted">Сохранённые банковские карты для быстрой оплаты заказов.</p>
         </div>
-        <button className="primary" onClick={() => setBindModal(true)} type="button">
+        <button className="primary" disabled={checking} onClick={() => setBindModal(true)} type="button">
           <Plus size={18} /> Привязать карту
         </button>
       </div>
 
+      {verification && <div className="panel" role="status">
+        <p>{verification}</p>
+        {!checking && retryAvailable && <button type="button" className="text-button" onClick={() => setCheckVersion(value => value + 1)}>Проверить ещё раз</button>}
+      </div>}
       <RemoteState r={remote}>
         <div className="cards-list">
           {cards.length ? (
@@ -111,7 +132,7 @@ export function CardsView() {
             )}
             <button
               className="primary"
-              disabled={busy}
+              disabled={busy || checking || !userId || remote.loading || !!remote.error}
               type="button"
               onClick={async () => {
                 if (bindLock.current) return;
@@ -119,24 +140,20 @@ export function CardsView() {
                 setBusy(true);
                 setBindError('');
                 try {
+                  // Capture server state before leaving this browser tab, scoped to this account.
+                  const before = await request('payment-cards');
                   const data = unwrap<any>(await request('payment-cards/bind', 'POST', {
                     returnUrl: paymentReturnUrl('/cards?binding=return', s.publicOrigin),
                   }));
-                  goPayment(data?.confirmationUrl);
+                  if (typeof data?.confirmationUrl !== 'string' || new URL(data.confirmationUrl).protocol !== 'https:') {
+                    throw new Error('Платёжная ссылка не получена. Попробуйте ещё раз.');
+                  }
+                  sessionStorage.setItem(BINDING_STORAGE_KEY, JSON.stringify({
+                    userId, cardIds: list<PaymentCardDto>(before).map(card => card.id), startedAt: Date.now(),
+                  }));
+                  goPayment(data.confirmationUrl);
                 } catch (err: any) {
-                  const msg = String(err?.message || '');
-                  const isDomainError =
-                    err?.status === 422 ||
-                    msg.toLowerCase().includes('возврат') ||
-                    msg.toLowerCase().includes('домен') ||
-                    msg.toLowerCase().includes('redirect') ||
-                    msg.toLowerCase().includes('returnurl');
-
-                  setBindError(
-                    isDomainError
-                      ? 'Адрес возврата не разрешён в ЮKassa: домен не входит в список разрешённых в настройках магазина мерчанта. Для успешной привязки добавьте домен в личном кабинете ЮKassa или задайте переменную ALLOWED_PAYMENT_RETURN_URL.'
-                      : (msg || 'Не удалось открыть защищённую страницу оплаты. Проверьте соединение и попробуйте ещё раз.')
-                  );
+                  setBindError(bindingError(err));
                   bindLock.current = false;
                   setBusy(false);
                 }

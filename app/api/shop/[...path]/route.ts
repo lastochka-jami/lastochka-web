@@ -11,6 +11,7 @@ import {
 import { validMutation } from '@/lib/guard';
 import { upstream, ApiError } from '@/lib/upstream';
 import { normalizePhone } from '@/lib/phone-auth';
+import { validatePaymentReturn } from '@/lib/payment-return';
 
 const responseHeaders = { 'Cache-Control': 'no-store, private' };
 
@@ -87,22 +88,13 @@ async function handle(req: Request, ctx: { params: Promise<{ path: string[] }> }
       );
     }
 
-    if (typeof body?.returnUrl === 'string') {
-      const configuredOrigin = new URL(process.env.PUBLIC_ORIGIN || 'http://localhost:3000').origin;
-      const allowedReturnUrl = process.env.ALLOWED_PAYMENT_RETURN_URL;
-      const u = new URL(body.returnUrl, configuredOrigin);
-      if (allowedReturnUrl) {
-        try {
-          const allowedOrigin = new URL(allowedReturnUrl).origin;
-          body.returnUrl = new URL(u.pathname + u.search, allowedOrigin).toString();
-        } catch {
-          body.returnUrl = u.toString();
-        }
-      } else if (u.origin !== configuredOrigin) {
-        return NextResponse.json({ message: 'Недопустимый адрес возврата' }, { status: 422 });
-      } else {
-        body.returnUrl = u.toString();
-      }
+    if (body?.returnUrl !== undefined) {
+      const returnUrl = validatePaymentReturn(body.returnUrl, req);
+      if (!returnUrl) return NextResponse.json({
+        message: 'Недопустимый адрес возврата',
+        errors: { returnUrl: ['Адрес возврата должен вести на текущий сайт Ласточки.'] },
+      }, { status: 422, headers: responseHeaders });
+      body.returnUrl = returnUrl;
     }
 
     const query = new URL(req.url).search;

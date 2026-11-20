@@ -4,12 +4,12 @@ import {
   createSession,
   cookieName,
   cookieOptions,
-  getAllowedPaymentOrigin,
 } from '@/lib/session';
+import { storefrontOrigin } from '@/lib/payment-return';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: Request) {
   const currentSession = await session();
   const fresh = currentSession ? null : await createSession();
 
@@ -19,7 +19,7 @@ export async function GET() {
       csrf: currentSession?.csrf || fresh?.csrf,
       storeId: currentSession?.store || Number(process.env.DEFAULT_STORE_ID) || 2,
       checkoutEnabled: process.env.CHECKOUT_ENABLED === 'true',
-      publicOrigin: getAllowedPaymentOrigin(),
+      publicOrigin: storefrontOrigin(req),
     },
     {
       headers: { 'Cache-Control': 'no-store, private' },
