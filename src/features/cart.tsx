@@ -454,6 +454,9 @@ function formatRub(v: unknown): string {
               )}
             </div>
 
+            {slotsRemote.error && <ErrorMessage message={slotsRemote.error} retry={slotsRemote.reload} />}
+            {addressesRemote.error && <ErrorMessage message={addressesRemote.error} retry={addressesRemote.reload} />}
+
             {/* Time Slot Banner */}
             {canSelectTime ? <div className="cart-time-banner-wrap">
               <button
@@ -471,8 +474,6 @@ function formatRub(v: unknown): string {
                 />
               </button>
 
-              {slotsRemote.error && <ErrorMessage message={slotsRemote.error} retry={slotsRemote.reload} />}
-              {addressesRemote.error && <ErrorMessage message={addressesRemote.error} retry={addressesRemote.reload} />}
               {showTimePicker && (
                 <div className="cart-time-dropdown panel stack">
                   <div className="two-fields date-time-grid">

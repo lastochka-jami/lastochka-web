@@ -27,16 +27,18 @@ test('banner boundary removes missing target while direct product keeps 404',asy
   await expect(page).toHaveURL(/\/catalog$/);
 });
 
-test('cart and search fresh navigation starts at top and back restores scroll',async({page})=>{
+test('product dialog preserves search scroll and fresh cart navigation starts at top',async({page})=>{
   await page.goto('/shop/search?query=салат');
   const result=page.locator('.product-card .product-title').last();
   await result.scrollIntoViewIfNeeded();
   const before=await page.evaluate(()=>scrollY);
   expect(before).toBeGreaterThan(200);
   await result.click();
-  await expect(page).toHaveURL(/\/product\/33/);
-  await expect.poll(()=>page.evaluate(()=>scrollY)).toBeLessThan(5);
-  await page.goBack();
+  const dialog=page.locator('dialog.product-modal');
+  await expect(dialog.locator('h1')).toBeVisible();
+  await expect(page).toHaveURL(/\/search/);
+  await dialog.getByRole('button',{name:'Закрыть',exact:true}).click();
+  await expect(dialog).toHaveCount(0);
   await expect(page).toHaveURL(/\/search/);
   await expect.poll(()=>page.evaluate(()=>scrollY)).toBeGreaterThan(200);
   await page.goto('/shop/cart');

@@ -136,8 +136,8 @@ async function HomeCategories({ categories }: { categories: Promise<HomeCategory
   );
 }
 
-async function HomeCollections({ groups }: { groups: Promise<ProductGroupDto[]> }) {
-  const recommended = (await groups).filter((group) => group.is_recommended);
+function HomeCollections({ groups }: { groups: ProductGroupDto[] }) {
+  const recommended = groups.filter((group) => group.is_recommended);
   if (!recommended.length) return null;
   return (
     <section className="home-collections-section">
@@ -176,8 +176,9 @@ export async function Home() {
   const groups = publicApi(`stores/${store}/product-groups`).then(list<ProductGroupDto>).catch(() => []);
   const categories = publicApi(`stores/${store}/categories?includeChildren=true&includeProducts=false&perPage=100`)
     .then(list<HomeCategory>).catch(() => []);
-  // Categories define the primary layout; recommendations stream in a reserved slot.
-  await categories;
+  // Both tile grids define the first screen. Resolve them together so a late
+  // collection grid cannot push the catalog action out from under the user.
+  const [, homeGroups] = await Promise.all([categories, groups]);
 
   return (
     <>
@@ -194,7 +195,7 @@ export async function Home() {
       </section>
       <div className="home-sheet">
         <HomeCategories categories={categories} />
-        <div className="home-collections-slot" role="region" aria-label="Подборки товаров"><Suspense fallback={null}><HomeCollections groups={groups} /></Suspense></div>
+        <div className="home-collections-slot" role="region" aria-label="Подборки товаров"><HomeCollections groups={homeGroups} /></div>
         <section className="catalog-hint-section">
           <div className="catalog-hint-card">
             <div className="catalog-hint-info">

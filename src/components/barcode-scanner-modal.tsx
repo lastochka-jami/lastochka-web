@@ -265,7 +265,7 @@ export function BarcodeScannerModal({ isOpen, onClose }: BarcodeScannerModalProp
       </div>
 
       {/* Main Viewfinder / Camera Area */}
-      <div className="barcode-scanner-body">
+      <div className={`barcode-scanner-body${manualMode ? ' is-manual' : ''}`}>
         {!manualMode ? (
           <>
             <video

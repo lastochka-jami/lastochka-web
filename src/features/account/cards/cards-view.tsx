@@ -105,14 +105,6 @@ export function CardsView() {
           ) : (
             <Empty title="У вас пока нет сохранённых карт">
               <p className="muted">Привяжите карту для быстрой и удобной оплаты заказов онлайн</p>
-              <button
-                className="primary"
-                onClick={() => setBindModal(true)}
-                type="button"
-                style={{ marginTop: 12 }}
-              >
-                <Plus size={18} /> Привязать карту
-              </button>
             </Empty>
           )}
         </div>

@@ -162,14 +162,6 @@ export function AddressesView() {
           {!addresses.length && (
             <Empty title="У вас пока нет сохранённых адресов">
               <p className="muted">Добавьте адрес доставки, чтобы видеть точные интервалы и стоимость</p>
-              <button
-                className="primary"
-                onClick={() => startEdit({})}
-                type="button"
-                style={{ marginTop: 12 }}
-              >
-                <Plus size={18} /> Добавить адрес
-              </button>
             </Empty>
           )}
         </div>
@@ -285,7 +277,7 @@ export function AddressesView() {
                   setCoordsConfirmed(false);
                 }}
               />
-              <label className="address-coordinate-confirmation">
+              <label className="check address-coordinate-confirmation">
                 <input
                   type="checkbox"
                   checked={coordsConfirmed}

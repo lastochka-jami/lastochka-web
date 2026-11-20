@@ -6,7 +6,7 @@ const cart = {storeGroups:[{store:{id:2,name:'Тестовый магазин',i
 test('filled guest cart can be viewed and edited at 320, 390, 768 and 1440 without overflow', async ({page}) => {
   test.setTimeout(120_000);
   await page.addInitScript(value => localStorage.setItem('lastochka_guest_cart_v1', JSON.stringify(value)),cart);
-  for (const width of [320,390,464,767,768,769,1024,1280,1440,1920]) {
+  for (const width of [320,390,464,767,768,769,1023,1024,1280,1440,1920]) {
     await page.setViewportSize({width,height:900});
     await page.goto('/shop/cart');
     const row = page.locator('.cart-item-row');
@@ -34,7 +34,7 @@ test('filled guest cart can be viewed and edited at 320, 390, 768 and 1440 witho
 
 test('mobile product actions remain clickable after adding a portion', async ({page}) => {
   test.setTimeout(120_000);
-  for(const width of [320,390,464,767,768,769,1024,1280,1440,1920]) {
+  for(const width of [320,390,464,767,768,769,1023,1024,1280,1440,1920]) {
     await page.setViewportSize({width,height:900});
     await page.goto('/shop/product/10');
     await page.evaluate(() => localStorage.removeItem('lastochka_guest_cart_v1'));
@@ -145,7 +145,7 @@ test('home, catalog and search fit all required widths with controlled API data'
   test.setTimeout(120_000);
   const errors:string[]=[];
   page.on('pageerror', e=>errors.push(e.message));
-  for (const width of [320,390,464,767,768,769,1024,1280,1440,1920]) {
+  for (const width of [320,390,464,767,768,769,1023,1024,1280,1440,1920]) {
     await page.setViewportSize({width,height:900});
     for (const path of ['/','/catalog','/search?query=салат']) {
       await page.goto('/shop' + path,{waitUntil:'networkidle'});

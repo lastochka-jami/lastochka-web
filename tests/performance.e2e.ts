@@ -14,6 +14,7 @@ async function authenticatedSession(page: Page) {
 test('cart mutation refreshes cart without refetching session', async ({ page }) => {
   const sessions = await authenticatedSession(page);
   let writes = 0, carts = 0;
+  await page.route('**/api/shop/products/10?**', route => route.fulfill({json:{data:{id:10,storeId:2,title:'Тестовый товар',price:100,stockQuantity:10,images:[],supplements:[]}}}));
   await page.route('**/api/shop/cart?*', route => { carts++; return route.fulfill({ json: { data: { storeGroups: [] } } }); });
   await page.route('**/api/shop/cart/items', route => { writes++; return route.fulfill({ json: {} }); });
   await page.goto('/shop/product/10');

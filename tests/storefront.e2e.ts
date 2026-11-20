@@ -7,9 +7,14 @@ const referenceViewports = [
 
 async function assertResponsivePage(page: import('@playwright/test').Page, path: string) {
   await page.goto('/shop' + path, {waitUntil:'networkidle'});
-  await expect(page.locator('main h1')).toHaveCount(1);
+  const dialog=page.locator('dialog.product-modal');
+  if(path.startsWith('/product/')) {
+    await expect(dialog.locator('h1')).toHaveCount(1);
+    await dialog.evaluate(el=>Promise.all(el.getAnimations().map(a=>a.finished)));
+  } else await expect(page.locator('main h1')).toHaveCount(1);
   const metrics=await page.evaluate(()=>{
-    const interactive=[...document.querySelectorAll<HTMLElement>('button,a,input,select,textarea')];
+    const scope=document.querySelector('dialog[open]')||document;
+    const interactive=[...scope.querySelectorAll<HTMLElement>('button,a,input,select,textarea')];
     const visible=(el:HTMLElement)=>{
       const r=el.getBoundingClientRect();
       const s=getComputedStyle(el);
@@ -28,7 +33,7 @@ async function assertResponsivePage(page: import('@playwright/test').Page, path:
     });
     return {
       overflow:document.documentElement.scrollWidth-document.documentElement.clientWidth,
-      h1:document.querySelectorAll('h1').length,
+      h1:scope.querySelectorAll('h1').length,
       outside:outside.map((el)=>el.getAttribute('aria-label')||el.textContent?.trim()).slice(0,5),
       tooSmall:tooSmall.map((el)=>el.getAttribute('aria-label')||el.textContent?.trim()).slice(0,8),
     };
@@ -77,12 +82,14 @@ test('location picker uses delivery and pickup tabs without leaving the page',as
   await expect(dialog.getByText('default',{exact:true})).toHaveCount(0);
 });
 
-test('layout has no horizontal overflow and browser history restores catalog',async({page})=>{
+test('product dialog closes back to the same catalog results without horizontal overflow',async({page})=>{
   await page.goto('/shop/search?query=молоко&page=1');
   const first=page.locator('.product-card .product-title').first();
   await first.click();
-  await expect(page).toHaveURL(/\/product\//);
-  await page.goBack();
+  const modal=page.locator('dialog.product-modal');
+  await expect(modal.locator('h1')).toBeVisible();
+  await modal.getByRole('button',{name:'Закрыть',exact:true}).click();
+  await expect(modal).toHaveCount(0);
   await expect(page).toHaveURL(/\/search\?query=.*page=1/);
   await expect(page.locator('.product-card').first()).toBeVisible();
   const overflow=await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth);
