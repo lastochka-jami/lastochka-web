@@ -37,6 +37,80 @@ test('shared product URL also opens a closable card over catalog',async({page})=
   await expect(page).toHaveURL(/\/catalog$/);
 });
 
+for (const entry of ['direct link', 'search'] as const) {
+  test(`gallery fits the whole photo without visible padding from a ${entry}`, async ({page}) => {
+    const sourcePrefix = 'https://media.example.test/gallery-';
+    const photos = [
+      {name: 'square', width: 160, height: 160},
+      {name: 'portrait', width: 80, height: 160},
+      {name: 'landscape', width: 160, height: 80},
+      {name: 'broken', width: 0, height: 0},
+    ];
+    await page.route('**/api/shop/products/10?**', async route => {
+      const response = await route.fetch();
+      const body = await response.json();
+      body.data.images = photos.map(photo => ({path: `${sourcePrefix}${photo.name}.png`}));
+      await route.fulfill({json: body});
+    });
+    await page.route('**/shop/_next/image?**', async route => {
+      const source = new URL(route.request().url()).searchParams.get('url');
+      const photo = photos.find(photo => source === `${sourcePrefix}${photo.name}.png`);
+      if (!photo) return route.fallback();
+      if (!photo.width) return route.fulfill({status: 404});
+      await route.fulfill({
+        contentType: 'image/svg+xml',
+        body: `<svg xmlns="http://www.w3.org/2000/svg" width="${photo.width}" height="${photo.height}"><rect width="100%" height="100%" fill="green"/></svg>`,
+      });
+    });
+
+    await page.setViewportSize({width: 1440, height: 844});
+    if (entry === 'search') {
+      await page.goto('/shop/search?query=порция');
+      await page.locator('.product-title').first().click();
+    } else {
+      await page.goto('/shop/product/10');
+    }
+    const modal = page.locator('dialog.product-modal');
+    const gallery = modal.locator('.gallery');
+    const image = gallery.locator(':scope > img');
+
+    for (const width of [1440, 768, 390]) {
+      await page.setViewportSize({width, height: 844});
+      for (const [index, photo] of photos.entries()) {
+        const thumbnail = gallery.getByRole('button', {name: `Фото ${index + 1}`, exact: true});
+        await thumbnail.click();
+        await expect(thumbnail).toHaveAttribute('aria-pressed', 'true');
+        await expect(thumbnail).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+        const placeholder = gallery.locator(':scope > .photo-placeholder');
+        const media = photo.width ? image : placeholder;
+        await expect(media).toBeVisible();
+        if (photo.width) {
+          await expect.poll(() => image.evaluate((el: HTMLImageElement) => el.naturalWidth / el.naturalHeight))
+            .toBeCloseTo(photo.width / photo.height, 1);
+          await expect(image).toHaveCSS('object-fit', 'contain');
+          await expect(image).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+        } else {
+          await expect(placeholder).toHaveText('Фото скоро');
+          await expect(placeholder).toHaveCSS('background-color', 'rgb(242, 241, 239)');
+        }
+        const box = (await media.boundingBox())!;
+        expect(box.width).toBeLessThanOrEqual(480);
+        expect(box.width).toBeCloseTo(box.height);
+        if (width === 1440) expect(box.width).toBe(480);
+      }
+    }
+    await expect(gallery.getByRole('button', {name: 'Поделиться товаром'})).toBeVisible();
+  });
+}
+
+test('gallery reserves a square for a product without a photo', async ({page}) => {
+  await page.goto('/shop/product/10');
+  const placeholder = page.locator('.product-modal .gallery > .photo-placeholder');
+  await expect(placeholder).toHaveText('Фото скоро');
+  const box = (await placeholder.boundingBox())!;
+  expect(box.width).toBeCloseTo(box.height);
+});
+
 test('close control stays fully inside a scrolled product dialog', async ({page}) => {
   await page.route('**/api/shop/products/10?**', async route => {
     const response = await route.fetch();
