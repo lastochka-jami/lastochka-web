@@ -156,6 +156,35 @@ test('main screens fit every required width at normal and short heights',async({
   await info.attach('geometry.json',{path:geometryPath,contentType:'application/json'});
 });
 
+test('footer background gives both content blocks symmetric insets aligned to the page grid', async ({page}) => {
+  await localOnly(page);
+  for (const width of [320, 390, 767, 768, 1440]) {
+    await page.setViewportSize({width, height: 844});
+    await page.goto('/shop/');
+    await expect.poll(() => page.locator('.footer').evaluate(footer => {
+      const background = footer.getBoundingClientRect();
+      const main = document.querySelector('#main')!;
+      const grid = main.getBoundingClientRect();
+      const style = getComputedStyle(main);
+      const left = grid.left + parseFloat(style.paddingLeft);
+      const right = grid.right - parseFloat(style.paddingRight);
+      return ['.footer-grid', '.footer-legal'].map(selector => {
+        const block = footer.querySelector(selector)!.getBoundingClientRect();
+        const leftInset = block.left - background.left;
+        const rightInset = background.right - block.right;
+        return {
+          hasInsets: leftInset > 0 && rightInset > 0,
+          isSymmetric: Math.abs(leftInset - rightInset) <= 1,
+          matchesGrid: Math.abs(block.left - left) <= 1 && Math.abs(block.right - right) <= 1,
+        };
+      });
+    }), {message: `Footer content at ${width}px`}).toEqual([
+      {hasInsets: true, isSymmetric: true, matchesGrid: true},
+      {hasInsets: true, isSymmetric: true, matchesGrid: true},
+    ]);
+  }
+});
+
 test('account error, retry and empty states remain usable on a narrow screen',async({page})=>{
   await account(page);await page.setViewportSize({width:320,height:420});
   for(const [path,endpoint] of [['addresses','addresses'],['cards','payment-cards'],['bonuses','bonuses'],['notifications','notifications']]){

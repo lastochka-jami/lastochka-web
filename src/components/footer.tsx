@@ -11,42 +11,44 @@ const appIcons = [
 export function Footer({ settings }: { settings?: AppSettingsContacts | null }) {
   const content = footerContent(settings);
   return (
-    <footer className="container footer" aria-label="Информация о магазине">
-      <div className="footer-grid">
-        <div className="footer-identity">
-          <HomeBrandLink className="footer-brand" imageSize={30}><span>Ласточка Джами</span></HomeBrandLink>
-          <p>Всё любимое — рядом</p>
-          <nav className="footer-socials" aria-label="Социальные сети">
-            {content.socials.map(item => <a key={item.name} href={item.href}>{item.name}</a>)}
-          </nav>
-        </div>
-        <nav className="footer-group" aria-labelledby="footer-buyers">
-          <h2 id="footer-buyers">Покупателям</h2>
-          <Link href="/faq">Вопросы и ответы</Link>
-          <Link href="/info">Информация и контакты</Link>
-          <a href={supportUrl}>Поддержка</a>
-        </nav>
-        <nav className="footer-group" aria-labelledby="footer-apps">
-          <h2 id="footer-apps">Наше приложение</h2>
-          <div className="footer-apps">
-            {content.apps.map((app, index) => (
-              <a key={app.name} className="footer-app-badge" href={app.href} aria-label={`Скачать в ${app.name}`}>
-                {appIcons[index]}<span><small>Скачать в</small><strong>{app.name}</strong></span>
-              </a>
-            ))}
+    <footer className="footer" aria-label="Информация о магазине">
+      <div className="container">
+        <div className="footer-grid">
+          <div className="footer-identity">
+            <HomeBrandLink className="footer-brand" imageSize={30}><span>Ласточка Джами</span></HomeBrandLink>
+            <p>Всё любимое — рядом</p>
+            <nav className="footer-socials" aria-label="Социальные сети">
+              {content.socials.map(item => <a key={item.name} href={item.href}>{item.name}</a>)}
+            </nav>
           </div>
-        </nav>
-        <section className="footer-group" aria-labelledby="footer-contacts">
-          <h2 id="footer-contacts">Контакты</h2>
-          <a href={content.phoneHref}>{content.phone}</a>
-          <p><span className="footer-label">Поддержка</span>пн–сб, 9:00–18:00</p>
-          <address>Нальчик, ул. Калинина, 76</address>
-        </section>
-      </div>
-      <div className="footer-legal">
-        <nav aria-label="Документы">{documentLinks.map(([name, href]) => <a key={href} href={href}>{name}</a>)}</nav>
-        <p>© {new Date().getFullYear()} Ласточка Джами</p>
-        <p>Продавец: ИП Хапова Лариса Аслануковна<br />ИНН 071510449657 · ОГРНИП 326070000013802</p>
+          <nav className="footer-group" aria-labelledby="footer-buyers">
+            <h2 id="footer-buyers">Покупателям</h2>
+            <Link href="/faq">Вопросы и ответы</Link>
+            <Link href="/info">Информация и контакты</Link>
+            <a href={supportUrl}>Поддержка</a>
+          </nav>
+          <nav className="footer-group" aria-labelledby="footer-apps">
+            <h2 id="footer-apps">Наше приложение</h2>
+            <div className="footer-apps">
+              {content.apps.map((app, index) => (
+                <a key={app.name} className="footer-app-badge" href={app.href} aria-label={`Скачать в ${app.name}`}>
+                  {appIcons[index]}<span><small>Скачать в</small><strong>{app.name}</strong></span>
+                </a>
+              ))}
+            </div>
+          </nav>
+          <section className="footer-group" aria-labelledby="footer-contacts">
+            <h2 id="footer-contacts">Контакты</h2>
+            <a href={content.phoneHref}>{content.phone}</a>
+            <p><span className="footer-label">Поддержка</span>пн–сб, 9:00–18:00</p>
+            <address>Нальчик, ул. Калинина, 76</address>
+          </section>
+        </div>
+        <div className="footer-legal">
+          <nav aria-label="Документы">{documentLinks.map(([name, href]) => <a key={href} href={href}>{name}</a>)}</nav>
+          <p>© {new Date().getFullYear()} Ласточка Джами</p>
+          <p>Продавец: ИП Хапова Лариса Аслануковна<br />ИНН 071510449657 · ОГРНИП 326070000013802</p>
+        </div>
       </div>
     </footer>
   );

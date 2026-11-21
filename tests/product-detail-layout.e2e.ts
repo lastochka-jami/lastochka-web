@@ -128,7 +128,10 @@ test('close control stays fully inside a scrolled product dialog', async ({page}
     await page.goto('/shop/product/10');
     const modal = page.locator('dialog.product-modal');
     await expect(modal.locator('.nutrition')).toBeVisible();
-    await modal.evaluate(el => { el.scrollTop = el.scrollHeight; });
+    await modal.evaluate((el, mobile) => {
+      const scroller = mobile ? el.querySelector('.product-modal-content')! : el;
+      scroller.scrollTop = scroller.scrollHeight;
+    }, width < 768);
     const close = modal.getByRole('button', {name:'Закрыть',exact:true});
     const geometry = await close.evaluate(el => {
       const r = el.getBoundingClientRect();
@@ -151,6 +154,52 @@ test('close control stays fully inside a scrolled product dialog', async ({page}
     await close.click();
     await expect(modal).toHaveCount(0);
   }
+});
+
+test('mobile purchase action stays visible and separate from the scrolling product content', async ({page}) => {
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  await page.route('**/api/shop/products/10?**', async route => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.data.description = 'Подробное описание продукта. '.repeat(80);
+    body.data.composition = 'Мука, вода, соль.';
+    await route.fulfill({json: body});
+  });
+  await page.setViewportSize({width: 390, height: 420});
+  await page.goto('/shop/product/10');
+
+  const dialog = page.locator('dialog.product-modal');
+  const content = dialog.locator('.product-modal-content');
+  const buy = dialog.getByRole('button', {name: /^Добавить .+ в корзину$/});
+  await expect(buy).toBeVisible();
+
+  for (const fraction of [0, 0.5, 1]) {
+    const scrollTop = await content.evaluate((el, fraction) => {
+      el.scrollTop = (el.scrollHeight - el.clientHeight) * fraction;
+      return el.scrollTop;
+    }, fraction);
+    if (fraction > 0) expect(scrollTop).toBeGreaterThan(0);
+
+    const dimensions = await buy.evaluate(el => {
+      const button = el.getBoundingClientRect();
+      const dialog = el.closest('dialog')!;
+      const content = dialog.querySelector('.product-modal-content')!;
+      const panel = el.closest('.detail-buy')!.getBoundingClientRect();
+      const hit = (y: number) => el.contains(document.elementFromPoint(button.left + button.width / 2, y));
+      return {
+        clearance: innerHeight - button.bottom,
+        abovePanel: content.getBoundingClientRect().bottom <= panel.top,
+        hit: hit(button.top + 1) && hit(button.bottom - 1),
+        overflow: Math.max(document.documentElement.scrollWidth - innerWidth, dialog.scrollWidth - dialog.clientWidth),
+      };
+    });
+    expect(dimensions).toEqual({clearance: 16, abovePanel: true, hit: true, overflow: 0});
+  }
+
+  const composition = dialog.getByText('Мука, вода, соль.', {exact: true});
+  await expect(composition).toBeInViewport({ratio: 1});
+  await buy.click();
+  await expect(dialog.locator('.detail-buy .counter')).toBeVisible();
 });
 
 test('empty account lists expose one add action and a reachable dialog close', async ({page}) => {

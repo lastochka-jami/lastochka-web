@@ -397,20 +397,20 @@ export function QuickProduct({ id, onClose }: { id: number; onClose: () => void 
 
   return (
     <Modal title="О товаре" onClose={onClose} wide className="product-modal">
-      {error ? (
-        <ErrorMessage message={error} retry={() => setAttempt(n => n + 1)} />
-      ) : p ? (
-        <>
-          <ProductDetail p={p} />
-        </>
+      {p && !error ? (
+        <ProductDetail p={p} inModal />
       ) : (
-        <p>Загружаем товар…</p>
+        <div className="product-modal-status">
+          {error
+            ? <ErrorMessage message={error} retry={() => setAttempt(n => n + 1)} />
+            : <p>Загружаем товар…</p>}
+        </div>
       )}
     </Modal>
   );
 }
 
-export function ProductDetail({ p: initial, stickyBuy = false }: { p: Product; stickyBuy?: boolean }) {
+export function ProductDetail({ p: initial, stickyBuy = false, inModal = false }: { p: Product; stickyBuy?: boolean; inModal?: boolean }) {
   const router = useRouter();
   const [p, setP] = useState(initial);
   const variantRequest = useRef(0);
@@ -432,179 +432,198 @@ export function ProductDetail({ p: initial, stickyBuy = false }: { p: Product; s
     .filter((sup) => selected[sup.id]?.length)
     .map((sup) => ({ supplementId: sup.id, valueIds: selected[sup.id] }));
 
-  return (
-    <div className={`product-detail ${stickyBuy ? 'has-mobile-buy-bar' : ''}`}>
-      <div className="gallery">
-        <div className="detail-actions">
-          {stickyBuy && <button type="button" className="icon-button product-back" aria-label="Назад" onClick={() => window.history.length > 1 ? router.back() : router.push('/catalog')}><ChevronLeft size={22} /></button>}
-          <Favorite p={p} />
-          <button
-            className="icon-button"
-            aria-label="Поделиться товаром"
-            type="button"
-            onClick={() =>
+  const gallery = (
+    <div className="gallery">
+      <div className="detail-actions">
+        {stickyBuy && <button type="button" className="icon-button product-back" aria-label="Назад" onClick={() => window.history.length > 1 ? router.back() : router.push('/catalog')}><ChevronLeft size={22} /></button>}
+        <Favorite p={p} />
+        <button
+          className="icon-button"
+          aria-label="Поделиться товаром"
+          type="button"
+          onClick={() =>
+            s.run(async () => {
+              const url = location.origin + '/shop/product/' + p.id;
+              if (navigator.share) {
+                await navigator.share({ title: p.title, url });
+              } else {
+                await navigator.clipboard.writeText(url);
+                s.notice('Ссылка скопирована');
+              }
+            })
+          }
+        >
+          <Share2 size={19} />
+        </button>
+      </div>
+
+      <Photo
+        src={p.images?.[imageIndex]?.path || p.preview}
+        alt={p.title}
+        sizes="(max-width: 767px) calc(100vw - 28px), (max-width: 1023px) calc((100vw - 72px) * 0.45), (max-width: 1399px) calc((100vw - 138px) * 0.55), 699px"
+        eager={stickyBuy && imageIndex === 0}
+      />
+      {p.images?.length > 1 && (
+        <div className="thumbnails">
+          {p.images.map((im, i) => (
+            <button
+              key={i}
+              onClick={() => setImage(i)}
+              aria-label={`Фото ${i + 1}`}
+              aria-pressed={i === imageIndex}
+              type="button"
+            >
+              <Photo src={im.thumbPath || im.path} alt="" width={72} height={72} sizes="72px" />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  const information = (
+    <div className="product-information-body">
+      {p.category && (
+        <Link className="eyebrow" href={'/category/' + (p.category.slug || p.category.id)}>
+          {p.category.name}
+        </Link>
+      )}
+      <h1>{p.title}</h1>
+      {availabilityText && (
+        <div className="product-detail-availability">
+          <span className="availability-badge-inline">
+            <Clock size={13} strokeWidth={2.2} /> {availabilityText}
+          </span>
+        </div>
+      )}
+      <p className="muted">
+        {p.weight && p.weight > 0 ? `${p.weight} г · ` : ''}
+        Цена за {quantityLabel(p, step(p))}
+        {p.pickupOnly ? ' · Только самовывоз' : ''}
+      </p>
+      <div className="detail-price">
+        {money(p.price)}{' '}
+        {p.priceOld && p.priceOld > p.price ? <del>{money(p.priceOld)}</del> : null}
+      </div>
+
+      {p.isConfigurable && p.variants?.length ? (
+        <label>
+          Вариант
+          <select
+            value={p.id}
+            onChange={(e) =>
               s.run(async () => {
-                const url = location.origin + '/shop/product/' + p.id;
-                if (navigator.share) {
-                  await navigator.share({ title: p.title, url });
-                } else {
-                  await navigator.clipboard.writeText(url);
-                  s.notice('Ссылка скопирована');
-                }
+                const version = ++variantRequest.current;
+                const d = product(unwrap(await request('products/' + e.target.value + '?storeId=' + (p.storeId || s.storeId))));
+                if (variantRequest.current !== version) return;
+                setP(d);
+                setImage(0);
+                setSelected({});
               })
             }
           >
-            <Share2 size={19} />
-          </button>
-        </div>
+            <option value={p.id}>Выберите вариант</option>
+            {p.variants.map((v) => (
+              <option key={v.id} value={v.id} disabled={v.stockQuantity <= 0}>
+                {v.title} · {money(v.price)}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
 
-        <Photo
-          src={p.images?.[imageIndex]?.path || p.preview}
-          alt={p.title}
-          sizes="(max-width: 767px) calc(100vw - 28px), (max-width: 1023px) calc((100vw - 72px) * 0.45), (max-width: 1399px) calc((100vw - 138px) * 0.55), 699px"
-          eager={stickyBuy && imageIndex === 0}
-        />
-        {p.images?.length > 1 && (
-          <div className="thumbnails">
-            {p.images.map((im, i) => (
-              <button
-                key={i}
-                onClick={() => setImage(i)}
-                aria-label={`Фото ${i + 1}`}
-                aria-pressed={i === imageIndex}
-                type="button"
-              >
-                <Photo src={im.thumbPath || im.path} alt="" width={72} height={72} sizes="72px" />
-              </button>
+      {p.supplements.map((sup) => (
+        <fieldset key={sup.id}>
+          <legend>
+            {sup.title}
+            {sup.isRequired ? ' *' : ''}
+          </legend>
+          {sup.values.map((v) => (
+            <label className="check" key={v.id}>
+              <input
+                type="checkbox"
+                checked={selected[sup.id]?.includes(v.id) || false}
+                onChange={(e) =>
+                  setSelected({
+                    ...selected,
+                    [sup.id]: e.target.checked
+                      ? [...(selected[sup.id] || []), v.id]
+                      : (selected[sup.id] || []).filter((id) => id !== v.id),
+                  })
+                }
+              />
+              {v.title || v.name}
+              {typeof v.price === 'number' && v.price > 0 ? ` + ${money(v.price)}` : ''}
+            </label>
+          ))}
+        </fieldset>
+      ))}
+
+      {p.description && (
+        <section>
+          <h3>О продукте</h3>
+          <p>{p.description}</p>
+        </section>
+      )}
+
+      {p.composition && (
+        <section>
+          <h3>Состав</h3>
+          <p>{p.composition}</p>
+        </section>
+      )}
+
+      {[p.proteins,p.fats, p.carbohydrates, p.calories].some(
+        (v) => typeof v === 'number' && v > 0,
+      ) && (
+        <section>
+          <h3>На 100 г продукта</h3>
+          <div className="nutrition">
+            {[
+              ['Белки', p.proteins],
+              ['Жиры', p.fats],
+              ['Углеводы', p.carbohydrates],
+              ['Ккал', p.calories],
+            ].map(([k, v]) => (
+              <div key={String(k)}>
+                <strong>{v ?? '—'}</strong>
+                <small>{k}</small>
+              </div>
             ))}
           </div>
-        )}
+        </section>
+      )}
+
+      {p.additionalInfo && <p>{p.additionalInfo}</p>}
+    </div>
+  );
+
+  const buy = (
+    <div className="detail-buy">
+      {missing
+        ? <p className="muted">Выберите обязательные добавки</p>
+        : <Buy p={p} supplements={supplements} />}
+    </div>
+  );
+
+  if (inModal) {
+    return (
+      <div className="product-detail">
+        <div className="product-modal-content">
+          {gallery}
+          <div className="product-information">{information}</div>
+        </div>
+        {buy}
       </div>
+    );
+  }
+
+  return (
+    <div className={`product-detail ${stickyBuy ? 'has-mobile-buy-bar' : ''}`}>
+      {gallery}
       <div className="product-information">
-        <div className="product-information-body">
-        {p.category && (
-          <Link className="eyebrow" href={'/category/' + (p.category.slug || p.category.id)}>
-            {p.category.name}
-          </Link>
-        )}
-        <h1>{p.title}</h1>
-        {availabilityText && (
-          <div className="product-detail-availability">
-            <span className="availability-badge-inline">
-              <Clock size={13} strokeWidth={2.2} /> {availabilityText}
-            </span>
-          </div>
-        )}
-        <p className="muted">
-          {p.weight && p.weight > 0 ? `${p.weight} г · ` : ''}
-          Цена за {quantityLabel(p, step(p))}
-          {p.pickupOnly ? ' · Только самовывоз' : ''}
-        </p>
-        <div className="detail-price">
-          {money(p.price)}{' '}
-          {p.priceOld && p.priceOld > p.price ? <del>{money(p.priceOld)}</del> : null}
-        </div>
-
-        {p.isConfigurable && p.variants?.length ? (
-          <label>
-            Вариант
-            <select
-              value={p.id}
-              onChange={(e) =>
-                s.run(async () => {
-                  const version = ++variantRequest.current;
-                  const d = product(unwrap(await request('products/' + e.target.value + '?storeId=' + (p.storeId || s.storeId))));
-                  if (variantRequest.current !== version) return;
-                  setP(d);
-                  setImage(0);
-                  setSelected({});
-                })
-              }
-            >
-              <option value={p.id}>Выберите вариант</option>
-              {p.variants.map((v) => (
-                <option key={v.id} value={v.id} disabled={v.stockQuantity <= 0}>
-                  {v.title} · {money(v.price)}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-
-        {p.supplements.map((sup) => (
-          <fieldset key={sup.id}>
-            <legend>
-              {sup.title}
-              {sup.isRequired ? ' *' : ''}
-            </legend>
-            {sup.values.map((v) => (
-              <label className="check" key={v.id}>
-                <input
-                  type="checkbox"
-                  checked={selected[sup.id]?.includes(v.id) || false}
-                  onChange={(e) =>
-                    setSelected({
-                      ...selected,
-                      [sup.id]: e.target.checked
-                        ? [...(selected[sup.id] || []), v.id]
-                        : (selected[sup.id] || []).filter((id) => id !== v.id),
-                    })
-                  }
-                />
-                {v.title || v.name}
-                {typeof v.price === 'number' && v.price > 0 ? ` + ${money(v.price)}` : ''}
-              </label>
-            ))}
-          </fieldset>
-        ))}
-
-
-
-        {p.description && (
-          <section>
-            <h3>О продукте</h3>
-            <p>{p.description}</p>
-          </section>
-        )}
-
-        {p.composition && (
-          <section>
-            <h3>Состав</h3>
-            <p>{p.composition}</p>
-          </section>
-        )}
-
-        {[p.proteins,p.fats, p.carbohydrates, p.calories].some(
-          (v) => typeof v === 'number' && v > 0,
-        ) && (
-          <section>
-            <h3>На 100 г продукта</h3>
-            <div className="nutrition">
-              {[
-                ['Белки', p.proteins],
-                ['Жиры', p.fats],
-                ['Углеводы', p.carbohydrates],
-                ['Ккал', p.calories],
-              ].map(([k, v]) => (
-                <div key={String(k)}>
-                  <strong>{v ?? '—'}</strong>
-                  <small>{k}</small>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {p.additionalInfo && <p>{p.additionalInfo}</p>}
-        </div>
-        <div className="detail-buy">
-          {missing ? (
-            <p className="muted">Выберите обязательные добавки</p>
-          ) : (
-            <Buy p={p} supplements={supplements} />
-          )}
-
-        </div>
+        {information}
+        {buy}
       </div>
       {stickyBuy && (
         <div className="mobile-product-buy-bar" aria-label="Быстрая покупка">
